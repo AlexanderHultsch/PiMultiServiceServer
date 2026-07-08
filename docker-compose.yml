@@ -1,0 +1,45 @@
+services:
+  pihole:
+    image: pihole/pihole:2026.07.2
+    restart: unless-stopped
+    environment:
+      TZ: ${TZ}
+      # Pi-hole v6: Passwort-Env-Name gegen docs.pi-hole.net/docker/configuration verifiziert
+      FTLCONF_webserver_api_password: ${PIHOLE_PASSWORD}
+      FTLCONF_dns_upstreams: "9.9.9.9;1.1.1.1"
+    ports:
+      - "${PI_STATIC_IP}:${PORT_DNS}:53/tcp"
+      - "${PI_STATIC_IP}:${PORT_DNS}:53/udp"
+      - "${PI_STATIC_IP}:${PORT_PIHOLE_UI}:80/tcp"
+    volumes:
+      - ./data/pihole/etc-pihole:/etc/pihole
+    networks: [lan_net]
+
+  web:
+    image: nginx:1.30.3-alpine
+    restart: unless-stopped
+    volumes:
+      - ./website:/usr/share/nginx/html:ro
+      - ./config/nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+    networks: [edge]
+    # KEIN ports: (Constraint M8) - nur ueber cloudflared/edge erreichbar
+
+  cloudflared:
+    image: cloudflare/cloudflared:2026.7.0
+    restart: unless-stopped
+    command: tunnel --no-autoupdate run --token ${CLOUDFLARE_TUNNEL_TOKEN}
+    depends_on: [web]
+    networks: [edge]
+
+  uptime-kuma:
+    image: louislam/uptime-kuma:2.4.0
+    restart: unless-stopped
+    ports:
+      - "${PI_STATIC_IP}:${PORT_UPTIME}:3001"
+    volumes:
+      - ./data/uptime-kuma:/app/data
+    networks: [lan_net]
+
+networks:
+  edge:
+  lan_net:
