@@ -13,6 +13,14 @@ set -a; source "${REPO_ROOT}/.env"; set +a
 : "${PORT_PIHOLE_UI:?PORT_PIHOLE_UI fehlt in .env}"
 : "${PORT_UPTIME:?PORT_UPTIME fehlt in .env}"
 
+AUTH_KEYS="${HOME}/.ssh/authorized_keys"
+if [[ ! -s "${AUTH_KEYS}" ]]; then
+  echo "FEHLER: ${AUTH_KEYS} ist leer oder existiert nicht." >&2
+  echo "Bevor Passwort-Login deaktiviert wird, muss dein SSH-Public-Key dort hinterlegt sein," >&2
+  echo "sonst sperrst du dich selbst aus. Siehe README Abschnitt 'SSH-Zugriff einrichten'." >&2
+  exit 1
+fi
+
 echo "==> SSH-Haertung (Public-Key-only, kein Root-Login)"
 sudo sed -i 's/^#\?PasswordAuthentication.*/PasswordAuthentication no/' /etc/ssh/sshd_config
 sudo sed -i 's/^#\?PermitRootLogin.*/PermitRootLogin no/' /etc/ssh/sshd_config
