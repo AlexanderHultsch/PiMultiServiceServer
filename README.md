@@ -250,17 +250,30 @@ cd ~/pi-server
 
 ### 6. Feste IP für den Pi reservieren (Router, manuell)
 
-**Wichtig zu verstehen:** Diese Reservierung sorgt dafür, dass der Router dem
-Pi (erkannt an seiner MAC-Adresse) **immer dieselbe IP** per DHCP zuteilt.
-Sie ändert nichts auf dem Pi selbst — der Pi fragt weiterhin ganz normal per
-DHCP nach einer Adresse, bekommt vom Router aber immer die reservierte. Der
-entscheidende Punkt: **die IP, die im Router bei dieser Reservierung steht,
-muss exakt mit `PI_STATIC_IP` in deiner `.env` übereinstimmen** — das
-passiert nicht automatisch, nur weil der Schalter aktiv ist.
+**Wichtig zu verstehen:** Diese Reservierung verknüpft eine **MAC-Adresse**
+mit einer IP. WLAN und Ethernet (LAN-Kabel) sind auf dem Pi **zwei
+unterschiedliche Netzwerk-Interfaces mit je einer eigenen MAC-Adresse**
+(`wlan0` bzw. `eth0`). Der Router muss also wissen, **welche der beiden
+MAC-Adressen gerade tatsächlich verbunden ist** — reserviere die IP für
+genau dieses Interface. Wechselst du später das Interface (z. B. WLAN →
+LAN-Kabel), musst du die Reservierung im Router einmalig auf die andere
+MAC-Adresse umstellen (Details dazu unten im Kasten "Später von WLAN auf
+LAN-Kabel wechseln"). Die IP selbst (`PI_STATIC_IP`) bleibt dabei gleich —
+nur die hinterlegte MAC-Adresse ändert sich.
 
-1. MAC-Adresse des Pi ermitteln:
+Zweiter entscheidender Punkt: **die IP, die im Router bei der Reservierung
+steht, muss exakt mit `PI_STATIC_IP` in deiner `.env` übereinstimmen** — das
+passiert nicht automatisch, nur weil ein Schalter aktiv ist.
+
+1. Herausfinden, welches Interface gerade aktiv verbunden ist, und dessen
+   MAC-Adresse notieren:
    ```bash
-   ip link show eth0 | awk '/ether/ {print $2}'
+   ip -4 addr show
+   ```
+   Das Interface mit einer Zeile `inet 192.168.x.x/24 ...` ist das aktive
+   (bei dir aktuell `wlan0`). MAC-Adresse dieses Interfaces:
+   ```bash
+   ip link show wlan0 | awk '/ether/ {print $2}'   # bei Ethernet: eth0 statt wlan0
    ```
 2. Aktuellen `PI_STATIC_IP`-Wert aus deiner `.env` nachsehen, damit du weißt,
    welche IP im Router eingetragen sein muss:
@@ -274,10 +287,11 @@ passiert nicht automatisch, nur weil der Schalter aktiv ist.
    dem Kennwort der FRITZ!Box anmelden.
 2. **Heimnetz → Netzwerk → Netzwerkverbindungen**.
 3. Den Pi in der Geräteliste suchen (Name `pi-server` bzw. die MAC-Adresse
-   von oben) und auf das Stift-/Bearbeiten-Symbol klicken.
-4. Dort findet sich der Schalter **"IPv4-Adresse dauerhaft zuweisen"** — bei
-   dir bereits aktiv. Direkt daneben/darüber steht ein **IPv4-Adressfeld**:
-   genau **dieser Wert** ist die IP, die reserviert wird.
+   des **aktiven** Interfaces von oben) und auf das Stift-/Bearbeiten-Symbol
+   klicken.
+4. Dort findet sich der Schalter **"IPv4-Adresse dauerhaft zuweisen"**.
+   Direkt daneben/darüber steht ein **IPv4-Adressfeld**: genau **dieser
+   Wert** ist die IP, die reserviert wird.
    - Steht dort bereits dieselbe Adresse wie dein `PI_STATIC_IP` aus `.env`
      (Schritt 2 oben) → nichts weiter zu tun, einfach mit **Übernehmen**
      bestätigen/speichern.
@@ -298,9 +312,31 @@ passiert nicht automatisch, nur weil der Schalter aktiv ist.
 
 Menüpunkt heißt dort meist **"DHCP-Reservierung"** / **"Static Lease"** /
 **"Address Reservation"** (Bezeichnung variiert je nach Hersteller); gleiches
-Prinzip: MAC-Adresse des Pi mit dem `PI_STATIC_IP`-Wert aus `.env`
-verknüpfen — im Zweifel lieber die im Router angezeigte/vergebene Adresse in
-`.env` übernehmen als umgekehrt.
+Prinzip: MAC-Adresse des **aktiven** Interfaces mit dem `PI_STATIC_IP`-Wert
+aus `.env` verknüpfen — im Zweifel lieber die im Router angezeigte/vergebene
+Adresse in `.env` übernehmen als umgekehrt.
+
+#### Später von WLAN auf LAN-Kabel wechseln
+
+Falls du (wie aktuell) über WLAN eingerichtet hast und später auf ein
+LAN-Kabel wechseln willst: das ändert **nichts** an `.env`,
+`docker-compose.yml` oder den `ufw`-Regeln — die IP bleibt identisch, nur
+die Netzwerk-Hardware wechselt. Zu erledigen ist dann nur:
+
+1. LAN-Kabel einstecken.
+2. Im Router (FRITZ!Box: siehe oben) die **gleiche Reservierung** (gleiche
+   `PI_STATIC_IP`) auf die MAC-Adresse von `eth0` umstellen (statt `wlan0`):
+   ```bash
+   ip link show eth0 | awk '/ether/ {print $2}'
+   ```
+   Diesen Wert im Router anstelle der bisherigen `wlan0`-MAC-Adresse eintragen.
+3. `sudo reboot`, danach mit dem Verifikationsbefehl unten prüfen.
+4. Optional, aber empfohlen (vermeidet zwei gleichzeitig aktive Interfaces
+   mit unterschiedlichem Verhalten): WLAN auf dem Pi deaktivieren, sobald
+   das Kabel dauerhaft verbunden ist:
+   ```bash
+   sudo rfkill block wifi
+   ```
 
 #### Nach dem Speichern
 
@@ -309,15 +345,16 @@ sudo reboot
 ```
 
 Nach dem Neustart erneut verbinden und prüfen, dass der Pi tatsächlich die
-reservierte Adresse hat:
+reservierte Adresse hat (funktioniert unabhängig davon, ob WLAN oder
+Ethernet aktiv ist):
 
 ```bash
 ssh pi@pi-server.local
-ip -4 addr show eth0 | grep inet
+ip -4 addr show | grep inet
 ```
 
-Das Ergebnis muss mit `PI_STATIC_IP` aus `.env` übereinstimmen — falls
-nicht, `.env` entsprechend anpassen, bevor du mit Schritt 7 weitermachst.
+Das Ergebnis muss die in `.env` eingetragene `PI_STATIC_IP` enthalten —
+falls nicht, `.env` entsprechend anpassen, bevor du mit Schritt 7 weitermachst.
 
 ### 7. Härtung: SSH key-only + Firewall Default-Deny
 
