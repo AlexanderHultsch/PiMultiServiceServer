@@ -250,17 +250,74 @@ cd ~/pi-server
 
 ### 6. Feste IP für den Pi reservieren (Router, manuell)
 
+**Wichtig zu verstehen:** Diese Reservierung sorgt dafür, dass der Router dem
+Pi (erkannt an seiner MAC-Adresse) **immer dieselbe IP** per DHCP zuteilt.
+Sie ändert nichts auf dem Pi selbst — der Pi fragt weiterhin ganz normal per
+DHCP nach einer Adresse, bekommt vom Router aber immer die reservierte. Der
+entscheidende Punkt: **die IP, die im Router bei dieser Reservierung steht,
+muss exakt mit `PI_STATIC_IP` in deiner `.env` übereinstimmen** — das
+passiert nicht automatisch, nur weil der Schalter aktiv ist.
+
 1. MAC-Adresse des Pi ermitteln:
    ```bash
    ip link show eth0 | awk '/ether/ {print $2}'
    ```
-2. In der Router-Admin-Oberfläche (siehe Schritt 2) den Menüpunkt
-   **"DHCP-Reservierung"** / **"Static Lease"** / **"Address Reservation"**
-   suchen (Bezeichnung variiert je nach Router-Hersteller) und dort die MAC-
-   Adresse des Pi fest mit der in `.env` eingetragenen `PI_STATIC_IP`
-   verknüpfen.
-3. Pi einmal neu starten (`sudo reboot`), damit die feste IP per DHCP
-   vergeben wird.
+2. Aktuellen `PI_STATIC_IP`-Wert aus deiner `.env` nachsehen, damit du weißt,
+   welche IP im Router eingetragen sein muss:
+   ```bash
+   grep -E 'PI_STATIC_IP|LAN_SUBNET' ~/pi-server/.env
+   ```
+
+#### FRITZ!Box (sehr verbreitet, z. B. AVM-Router)
+
+1. Im Browser <http://fritz.box> (oder <http://192.168.178.1>) öffnen, mit
+   dem Kennwort der FRITZ!Box anmelden.
+2. **Heimnetz → Netzwerk → Netzwerkverbindungen**.
+3. Den Pi in der Geräteliste suchen (Name `pi-server` bzw. die MAC-Adresse
+   von oben) und auf das Stift-/Bearbeiten-Symbol klicken.
+4. Dort findet sich der Schalter **"IPv4-Adresse dauerhaft zuweisen"** — bei
+   dir bereits aktiv. Direkt daneben/darüber steht ein **IPv4-Adressfeld**:
+   genau **dieser Wert** ist die IP, die reserviert wird.
+   - Steht dort bereits dieselbe Adresse wie dein `PI_STATIC_IP` aus `.env`
+     (Schritt 2 oben) → nichts weiter zu tun, einfach mit **Übernehmen**
+     bestätigen/speichern.
+   - Steht dort eine **andere** Adresse (typischer Fall, wenn der Pi vorher
+     automatisch per DHCP eine andere IP bekommen hat): entweder das Feld
+     auf den Wert deines `PI_STATIC_IP` ändern (muss innerhalb des von der
+     FRITZ!Box verwalteten Bereichs liegen, Standard meist `192.168.178.x`),
+     **oder** einfacher: diesen im Router angezeigten Wert 1:1 in `.env`
+     als `PI_STATIC_IP` übernehmen (`nano ~/pi-server/.env`).
+5. **FRITZ!Box-Standard-LAN ist `192.168.178.0/24`**, nicht `192.168.1.0/24`.
+   Falls dein `LAN_SUBNET` in `.env` noch `192.168.1.0/24` ist (z. B. weil
+   `setup-env.sh` es nicht korrekt erkannt hat), jetzt auf `192.168.178.0/24`
+   korrigieren — sonst funktionieren die `ufw`-Regeln aus Schritt 7 nicht
+   für dein tatsächliches LAN.
+6. Speichern/**Übernehmen** klicken.
+
+#### Andere Router-Hersteller
+
+Menüpunkt heißt dort meist **"DHCP-Reservierung"** / **"Static Lease"** /
+**"Address Reservation"** (Bezeichnung variiert je nach Hersteller); gleiches
+Prinzip: MAC-Adresse des Pi mit dem `PI_STATIC_IP`-Wert aus `.env`
+verknüpfen — im Zweifel lieber die im Router angezeigte/vergebene Adresse in
+`.env` übernehmen als umgekehrt.
+
+#### Nach dem Speichern
+
+```bash
+sudo reboot
+```
+
+Nach dem Neustart erneut verbinden und prüfen, dass der Pi tatsächlich die
+reservierte Adresse hat:
+
+```bash
+ssh pi@pi-server.local
+ip -4 addr show eth0 | grep inet
+```
+
+Das Ergebnis muss mit `PI_STATIC_IP` aus `.env` übereinstimmen — falls
+nicht, `.env` entsprechend anpassen, bevor du mit Schritt 7 weitermachst.
 
 ### 7. Härtung: SSH key-only + Firewall Default-Deny
 
