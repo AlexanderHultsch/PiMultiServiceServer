@@ -33,6 +33,14 @@ bekommst. Wo es ging, wurde die manuelle Arbeit in Skripte gepackt
 — übrig bleiben nur die Schritte, die zwingend eine Cloudflare-/Router-
 Weboberfläche brauchen (dort gibt es keine sichere Kommandozeilen-Automatisierung).
 
+> **Hinweis: Dieses Repository ist öffentlich.** Jeder kann `docker-compose.yml`,
+> die Skripte und dieses README lesen. Das ist unproblematisch, solange
+> `.env` und `data/` (siehe `.gitignore`) niemals committet werden — dort
+> leben alle Geheimnisse (Pi-hole-Passwort, Cloudflare-Token, age-Key).
+> Vor jedem `git push`: `git status` prüfen und im Zweifel
+> `git ls-files | grep -E '(^|/)\.env$|^data/'` ausführen (muss leer sein,
+> wird auch von `scripts/verify.sh` automatisch geprüft).
+
 ---
 
 ## Übersicht: Was am Ende automatisiert läuft vs. was du manuell tust
@@ -96,11 +104,28 @@ folgt im Schnellstart weiter unten.
 - Ein Computer (Windows/Mac/Linux) zum Flashen der SD-Karte und für SSH.
 - Raspberry Pi 4, microSD-Karte oder USB-SSD, Netzteil, Netzwerkkabel oder WLAN.
 - Ein Cloudflare-Account (kostenlos): <https://dash.cloudflare.com/sign-up>
-- Eine Domain, die entweder bei Cloudflare registriert ist, oder eine
-  bestehende Domain, deren Nameserver du auf Cloudflare umstellst
-  (Cloudflare Dashboard → "Add a domain" → Anweisungen dort befolgen).
+- Eine Domain (siehe "Domain besorgen" direkt unten, falls du noch keine hast).
 - Ein Ziel für verschlüsselte Backups, das `rclone` unterstützt (Default:
   OneDrive — jeder von `rclone config` unterstützte Dienst funktioniert).
+
+### Domain besorgen: 3 Wege, einer davon ist Pflicht
+
+Du brauchst **irgendeine** Domain, die bei Cloudflare als "Zone" verwaltet
+wird (d. h. Cloudflare ist für ihre DNS-Einträge zuständig — unabhängig
+davon, wo die Domain ursprünglich gekauft wurde). Es gibt drei Wege dahin;
+du brauchst nur **einen**:
+
+| Weg | Wann sinnvoll | Ablauf |
+|---|---|---|
+| **A. Neu registrieren über Cloudflare Registrar** (empfohlen, wenn du noch **keine** Domain hast — dein Fall) | Einfachster Weg, ein Anbieter für alles, Cloudflare verlangt keinen Aufpreis auf den Einkaufspreis | In <https://dash.cloudflare.com> einloggen, im Bereich zur Domain-Registrierung (Beschriftung z. B. "Register Domains"/"Domain Registration" — Cloudflare ändert Menütexte gelegentlich) Wunschnamen suchen und direkt kaufen. Domain landet automatisch auf Cloudflare-Nameservern, kein Extra-Schritt nötig |
+| **B. Bestehende Domain "verbinden" (nur DNS umziehen, Registrierung bleibt woanders)** | Du hast schon eine Domain bei einem anderen Anbieter (Namecheap, IONOS, Strato, …) und willst sie dort nicht kündigen | Cloudflare Dashboard → **Add a domain** → Domain eingeben → Cloudflare zeigt dir 2 Nameserver an → diese beim bisherigen Registrar (dort, wo du die Domain gekauft hast) in den Domain-Einstellungen eintragen. Dauert je nach Anbieter Minuten bis ~24 Std. |
+| **C. Domain zu Cloudflare transferieren (Registrierung selbst umziehen)** | Du hast eine Domain woanders und willst auch die Registrierung (Verwaltung/Verlängerung) zu Cloudflare verschieben | Domain muss zuerst per Weg B aktiv auf Cloudflare sein, dann Dashboard → **Domain Registration → Transfer Domains** → Auth-/EPP-Code vom alten Registrar eingeben. Dauert bis zu 10 Tage, meist inkl. einem Jahr Laufzeit-Verlängerung |
+
+**Für dich (noch keine Domain vorhanden): Weg A.** Direkt im Cloudflare
+Dashboard eine Domain registrieren — danach ist sie sofort eine Cloudflare-
+Zone und du kannst mit Schnellstart Schritt 8 (Tunnel + Public Hostname)
+weitermachen. Ein günstiger `.de`/`.com`/`.xyz` o. ä. reicht für dieses
+Projekt völlig aus.
 
 ### SSH-Schlüsselpaar auf deinem Computer erzeugen (falls noch nicht vorhanden)
 
@@ -119,6 +144,12 @@ seit Windows 10 vorinstalliert), oder PuTTYgen verwenden.
 
 ## Schnellstart (Copy & Paste)
 
+> **Schon den Imager benutzt und SSH aktiviert (wie z. B. bei dir)?** Dann
+> ist Schritt 1 bereits erledigt — überspringe ihn, aber lies den Kasten
+> "Prüfen, was der Imager tatsächlich eingerichtet hat" am Ende von Schritt 1
+> einmal kurz durch, bevor du mit Schritt 2 weitermachst. Alle anderen
+> Schritte (2–16) gelten unverändert für dich.
+
 ### 1. SD-Karte flashen und SSH vorbereiten
 
 1. [Raspberry Pi Imager](https://www.raspberrypi.com/software/) installieren und öffnen.
@@ -129,7 +160,35 @@ seit Windows 10 vorinstalliert), oder PuTTYgen verwenden.
      **Public Key** einfügen (Inhalt von `~/.ssh/id_ed25519.pub` von deinem
      Computer, NICHT den privaten Schlüssel!)
    - Falls per WLAN: SSID/Passwort hinterlegen
+   - Optional: **"Enable Raspberry Pi Connect"** — dazu mehr im Abschnitt
+     "Raspberry Pi Connect" weiter unten; für dieses Setup nicht nötig, aber
+     unschädlich, wenn aktiviert.
 4. Schreiben, SD-Karte in den Pi, Pi einschalten.
+
+#### Prüfen, was der Imager tatsächlich eingerichtet hat
+
+Falls du (wie in deinem Fall) den Imager schon verwendet hast: prüfe nach
+dem ersten Login, ob dabei wirklich ein **Public Key** (nicht nur Passwort-
+Login) hinterlegt wurde — das ist Voraussetzung für Schritt 7
+(`01-harden.sh` bricht sonst ab):
+
+```bash
+cat ~/.ssh/authorized_keys 2>/dev/null && echo "OK: Key vorhanden" || echo "FEHLT: siehe unten"
+```
+
+Falls das leer ist oder du dich per Passwort einloggen musstest: Key von
+deinem Computer nachtragen (ersetzt kein späteres `01-harden.sh`, macht es
+erst möglich):
+
+```bash
+# Mac/Linux, auf deinem Computer (nicht auf dem Pi):
+ssh-copy-id pi@pi-server.local
+```
+
+```powershell
+# Windows (PowerShell), auf deinem Computer, falls ssh-copy-id fehlt:
+Get-Content $env:USERPROFILE\.ssh\id_ed25519.pub | ssh pi@pi-server.local "mkdir -p ~/.ssh && cat >> ~/.ssh/authorized_keys"
+```
 
 ### 2. Verbinden
 
@@ -165,7 +224,7 @@ automatisch erkanntes LAN), generiert bei Bedarf ein sicheres
 Pi-hole-Passwort sowie automatisch das age-Schlüsselpaar fürs Backup, und
 schreibt am Ende `.env` (mit `chmod 600`).
 
-Falls du den Cloudflare-Tunnel-Token (Schritt 6) noch nicht hast: bei der
+Falls du den Cloudflare-Tunnel-Token (Schritt 8) noch nicht hast: bei der
 Frage einfach Enter drücken und ihn später manuell in `.env` nachtragen —
 das Skript weist dich am Ende noch einmal darauf hin.
 
@@ -337,6 +396,58 @@ PASS/FAIL-Ausgabe pro Check.
 
 Siehe Abschnitt "Restore-Prozedur" unten — **vor Abschluss des Setups auf
 einem leeren/frischen System einmal tatsächlich durchführen.**
+
+---
+
+## Raspberry Pi Connect — brauchst du das zusätzlich zu SSH?
+
+Du hast Raspberry Pi Connect im Imager aktiviert. Kurz eingeordnet, damit du
+entscheiden kannst, ob du es behältst:
+
+**Was es ist:** ein Fernzugriffs-Dienst von der Raspberry Pi Foundation
+selbst. Auf Raspberry Pi OS **Lite** (dein Fall, kein Desktop) läuft davon
+automatisch nur die "Lite"-Variante mit **reinem Remote-Shell-Zugriff** über
+den Browser (kein Bildschirm-Sharing, das gäbe es nur mit Desktop-OS).
+
+**Wie es funktioniert:** Der `rpi-connect`-Dienst baut eine **ausgehende**
+Verbindung zu den Relay-/Signalisierungsservern von Raspberry Pi auf
+(WebRTC, wie bei Zoom/Meet) und stellt darüber eine Peer-to-Peer-Verbindung
+zu deinem Browser her, sobald du dich unter
+<https://connect.raspberrypi.com> mit deiner **Raspberry Pi ID** anmeldest.
+
+**Ist das mit diesem Setup kompatibel? Ja:**
+- Es öffnet **keinen** eingehenden Port — passt zu [N1]/[M4] (ufw
+  Default-Deny bleibt unangetastet, keine zusätzliche `ufw allow`-Regel nötig).
+- Es ersetzt nicht die SSH-Härtung aus Schritt 7 — beide laufen unabhängig
+  nebeneinander.
+
+**Aber wichtig zu wissen:** Remote Shell über Connect authentifiziert sich
+über dein **Raspberry Pi ID**-Konto (Browser-Login + Geräte-Verknüpfung),
+**nicht** über deinen SSH-Key und **nicht** über `authorized_keys`. Damit ist
+es ein zweiter, von diesem Repo unabhängiger Zugriffsweg auf eine Shell auf
+deinem Pi — er wird von `01-harden.sh`/`ufw` nicht mit abgesichert. Die SPEC
+selbst kennt nur Tailscale/WireGuard als optionales Zusatz-Zugriffsmodul
+(Abschnitt 5.5); Raspberry Pi Connect ist funktional vergleichbar (kein
+Port-Forwarding, Fernzugriff von überall), aber ein separates, proprietäres
+System der Raspberry Pi Foundation.
+
+**Empfehlung:**
+- **Behalten**, wenn du gelegentlich bequem ohne VPN auf eine Shell zugreifen
+  willst — dann aber dein Raspberry-Pi-ID-Konto wie ein wichtiges Passwort
+  behandeln (einzigartiges, starkes Passwort; 2FA aktivieren, falls von
+  Raspberry Pi angeboten).
+- **Deaktivieren**, wenn du ausschließlich SSH aus dem LAN nutzen willst und
+  keinen zusätzlichen Zugriffsweg möchtest (kleinere Angriffsfläche, näher
+  am ursprünglichen SPEC-Scope):
+  ```bash
+  rpi-connect off
+  # optional dauerhaft deinstallieren:
+  sudo apt remove --purge rpi-connect-lite
+  ```
+- Nur Remote-Shell gezielt abschalten, Connect selbst aber installiert lassen:
+  ```bash
+  rpi-connect shell off
+  ```
 
 ---
 
