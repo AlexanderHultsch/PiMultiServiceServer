@@ -7,7 +7,7 @@ echo "==> System aktualisieren"
 sudo apt update && sudo apt full-upgrade -y
 
 echo "==> Basis-Pakete installieren"
-sudo apt install -y ufw fail2ban unattended-upgrades rclone age
+sudo apt install -y git ufw fail2ban unattended-upgrades rclone age
 
 if ! command -v docker >/dev/null 2>&1; then
   echo "==> Docker installieren"

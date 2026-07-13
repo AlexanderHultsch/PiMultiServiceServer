@@ -207,8 +207,13 @@ in dessen App).
 
 ### 3. Repo klonen
 
+Raspberry Pi OS Lite hat `git` nicht vorinstalliert — an dieser Stelle ist
+`scripts/00-bootstrap.sh` (das `git` mitinstalliert) noch nicht ausgeführt,
+also erst kurz manuell nachinstallieren:
+
 ```bash
-git clone <URL-DIESES-REPOS> ~/pi-server
+sudo apt update && sudo apt install -y git
+git clone https://github.com/AlexanderHultsch/MultiServiceServer.git ~/pi-server
 cd ~/pi-server
 ```
 
