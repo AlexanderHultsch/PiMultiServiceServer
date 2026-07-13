@@ -413,12 +413,17 @@ lässt (OAuth-geschützte Weboberfläche).
    nano .env
    # CLOUDFLARE_TUNNEL_TOKEN=<eingefügter Wert>
    ```
-6. Im selben Tunnel-Setup (oder danach unter dem Tunnel → **Public Hostname**
-   → **Add a public hostname**):
-   - Subdomain + Domain = dein `DOMAIN`-Wert aus `.env`
-   - Service **Type**: `HTTP`
-   - Service **URL**: `web:80`
-   - Speichern.
+6. Im selben Tunnel-Setup (oder danach unter dem Tunnel → **Published
+   Application routes** → **Add published application**, aktuelle
+   Cloudflare-Bezeichnung, Stand 2026):
+   - **Subdomain**: leer lassen, außer du willst z. B. `www.` davor
+   - **Domain**: dein `DOMAIN`-Wert aus `.env` (bei dir `ahultsch.com`)
+   - **Path**: leer lassen (matcht alles)
+   - **Service URL**: `http://web:80` — **nicht** `localhost`! `web` ist der
+     interne Docker-Servicename aus `docker-compose.yml`, nur für
+     `cloudflared` im `edge`-Netzwerk erreichbar; Port `80`, weil nginx im
+     Container darauf lauscht (kein Host-Port vorhanden, siehe [M8]).
+   - **Add route** klicken.
 
 ### 9. Dienste starten
 
