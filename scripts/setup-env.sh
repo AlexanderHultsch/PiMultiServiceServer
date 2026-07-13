@@ -83,6 +83,10 @@ if [[ -z "${PIHOLE_PASSWORD}" ]]; then
   PIHOLE_PASSWORD="$(head -c 32 /dev/urandom | base64 | tr -dc 'A-Za-z0-9' | head -c 24)"
   echo "Generiertes Pi-hole-Passwort: ${PIHOLE_PASSWORD}"
   echo "(Notiere es dir jetzt - es wird nur einmal angezeigt und steht danach in .env.)"
+elif [[ "${#PIHOLE_PASSWORD}" -lt 8 ]]; then
+  echo "WARNUNG: Das ist ein sehr kurzes Passwort (${#PIHOLE_PASSWORD} Zeichen)."
+  echo "Die Pi-hole-UI ist zwar nur im LAN erreichbar, trotzdem empfehlenswert:"
+  echo "spaeter in der Pi-hole-UI unter Settings > Web Interface / API ein laengeres setzen."
 fi
 
 ask_secret CLOUDFLARE_TUNNEL_TOKEN "Tunnel-Token aus dem Cloudflare Zero Trust Dashboard:

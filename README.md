@@ -60,7 +60,11 @@ Weboberfläche brauchen (dort gibt es keine sichere Kommandozeilen-Automatisieru
 ## Verwendete Image-Versionen
 
 Gegen die jeweils aktuelle stabile Version verifiziert (Stand: 2026-07-08).
-`:latest` wird laut Spezifikation nirgends verwendet.
+`:latest` wird laut Spezifikation nirgends verwendet. Diese exakten Tags
+wurden am 2026-07-13 erfolgreich auf echter Raspberry-Pi-4-Hardware
+deployt (`docker compose up -d`, alle vier Container `running`/`healthy`,
+öffentliche Seite per `curl -I` mit `HTTP/2 200` über den Cloudflare-Tunnel
+bestätigt).
 
 | Dienst | Image | Tag |
 |---|---|---|
@@ -628,6 +632,10 @@ und abhaken, bevor du das Setup als abgeschlossen betrachtest.
 | Geräte im LAN nutzen Pi-hole nicht als DNS | Router-DNS-Einstellung noch nicht gesetzt oder Geräte-Cache | Router-DNS-Setting prüfen (Schnellstart Schritt 10); betroffenes Gerät neu verbinden |
 | `scripts/01-harden.sh` bricht mit Fehler ab | Kein Public Key in `~/.ssh/authorized_keys` | Key wie in Schnellstart Schritt 1 hinterlegen, dann erneut ausführen |
 | `scripts/backup.sh` schlägt bei `rclone` fehl | Remote nicht konfiguriert oder Name stimmt nicht mit `BACKUP_REMOTE` überein | `rclone listremotes`; Schnellstart Schritt 13 wiederholen |
+| `-bash: git: command not found` beim Klonen | Raspberry Pi OS Lite hat `git` nicht vorinstalliert, `00-bootstrap.sh` (installiert es) läuft erst nach dem Klonen | `sudo apt update && sudo apt install -y git`, dann erneut klonen (Schnellstart Schritt 3) |
+| Nach Reboot nicht mehr unter der reservierten IP erreichbar | Router-Reservierung hängt an der MAC-Adresse des **falschen** Interfaces (z. B. `eth0` reserviert, Pi hängt aber an `wlan0`, oder umgekehrt) | `ip -4 addr show` auf dem Pi, aktives Interface ermitteln, MAC davon mit dem Router-Eintrag abgleichen (Schnellstart Schritt 6) |
+| `ufw`-Regeln passen nicht zum tatsächlichen LAN | `LAN_SUBNET` in `.env` enthält eine Host-Adresse statt der Netz-Adresse (z. B. `192.168.178.53/24` statt `192.168.178.0/24`) | `grep LAN_SUBNET .env` prüfen, bei Bedarf korrigieren, `scripts/01-harden.sh` erneut ausführen (aktuelle `setup-env.sh`-Version korrigiert das automatisch) |
+| Cloudflare-Dashboard zeigt keinen Menüpunkt "Public Hostname" | Cloudflare hat die Bezeichnung zu "Published Application routes" / "Add published application" geändert (Stand 2026) | Im Tunnel-Detail nach **Published Application routes** suchen, Felder wie in Schnellstart Schritt 8 ausfüllen |
 
 ---
 
