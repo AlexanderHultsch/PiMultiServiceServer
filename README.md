@@ -152,13 +152,26 @@ seit Windows 10 vorinstalliert), oder PuTTYgen verwenden.
 
 ### 1. SD-Karte flashen und SSH vorbereiten
 
+> **Kein Standard-Benutzer "pi" mehr:** Seit Raspberry Pi OS "Bookworm" gibt
+> es keinen vorinstallierten `pi`-Nutzer. Du legst im Imager unter "Advanced
+> options" einen **eigenen Benutzernamen** fest. In diesem README steht
+> überall `<benutzer>` als Platzhalter dafür — **ersetze ihn in jedem Befehl
+> durch den Namen, den du hier vergibst** (in deinem Fall z. B. `alex`).
+
 1. [Raspberry Pi Imager](https://www.raspberrypi.com/software/) installieren und öffnen.
 2. Gerät: **Raspberry Pi 4**. Betriebssystem: **Raspberry Pi OS Lite (64-bit)**.
 3. Auf das Zahnrad-Symbol (⚙, "Advanced options") klicken, dort:
    - Hostname vergeben (z. B. `pi-server`)
+   - **Benutzername und Passwort festlegen** — Passwort trotzdem setzen,
+     auch wenn du Public-Key-Login willst (Fallback, falls der Key-Import
+     mal nicht greift — siehe Kasten unten, das ist genau das, was bei dir
+     passiert ist).
    - SSH aktivieren → "Allow public-key authentication only" → deinen
      **Public Key** einfügen (Inhalt von `~/.ssh/id_ed25519.pub` von deinem
-     Computer, NICHT den privaten Schlüssel!)
+     Computer, NICHT den privaten Schlüssel!). **Wichtig:** manche
+     Imager-Versionen übernehmen den eingefügten Key beim Schreiben nicht
+     zuverlässig — nach dem ersten Login immer mit dem Befehl im Kasten
+     unten verifizieren, statt dich darauf zu verlassen.
    - Falls per WLAN: SSID/Passwort hinterlegen
    - Optional: **"Enable Raspberry Pi Connect"** — dazu mehr im Abschnitt
      "Raspberry Pi Connect" weiter unten; für dieses Setup nicht nötig, aber
@@ -167,28 +180,32 @@ seit Windows 10 vorinstalliert), oder PuTTYgen verwenden.
 
 #### Prüfen, was der Imager tatsächlich eingerichtet hat
 
-Falls du (wie in deinem Fall) den Imager schon verwendet hast: prüfe nach
-dem ersten Login, ob dabei wirklich ein **Public Key** (nicht nur Passwort-
-Login) hinterlegt wurde — das ist Voraussetzung für Schritt 7
-(`01-harden.sh` bricht sonst ab):
+Nach dem ersten Login **immer** prüfen, ob wirklich ein **Public Key**
+hinterlegt wurde (nicht nur Passwort-Login funktioniert) — das ist
+Voraussetzung für Schritt 7 (`01-harden.sh` bricht sonst mit einer
+Fehlermeldung ab, damit du dich nicht aussperrst):
 
 ```bash
 cat ~/.ssh/authorized_keys 2>/dev/null && echo "OK: Key vorhanden" || echo "FEHLT: siehe unten"
 ```
 
-Falls das leer ist oder du dich per Passwort einloggen musstest: Key von
-deinem Computer nachtragen (ersetzt kein späteres `01-harden.sh`, macht es
-erst möglich):
+**Falls das leer ist** (der Imager-Key-Import hat nicht funktioniert, du bist
+gerade nur per Passwort eingeloggt — das ist ein bekanntes, gelegentliches
+Imager-Problem, kein Fehler deinerseits): Key jetzt von deinem Computer aus
+nachtragen. Das funktioniert über die bestehende Passwort-Anmeldung:
 
 ```bash
-# Mac/Linux, auf deinem Computer (nicht auf dem Pi):
-ssh-copy-id pi@pi-server.local
+# Mac/Linux, auf DEINEM COMPUTER (nicht auf dem Pi), Passwort wird einmal abgefragt:
+ssh-copy-id <benutzer>@pi-server.local
 ```
 
 ```powershell
-# Windows (PowerShell), auf deinem Computer, falls ssh-copy-id fehlt:
-Get-Content $env:USERPROFILE\.ssh\id_ed25519.pub | ssh pi@pi-server.local "mkdir -p ~/.ssh && cat >> ~/.ssh/authorized_keys"
+# Windows (PowerShell), auf DEINEM COMPUTER, falls ssh-copy-id fehlt:
+Get-Content $env:USERPROFILE\.ssh\id_ed25519.pub | ssh <benutzer>@pi-server.local "mkdir -p ~/.ssh && cat >> ~/.ssh/authorized_keys"
 ```
+
+Danach auf dem Pi erneut prüfen (Befehl oben) — erst wenn "OK: Key
+vorhanden" erscheint, weiter mit Schritt 2 bzw. Schritt 7.
 
 ### 2. Verbinden
 
@@ -196,8 +213,8 @@ Get-Content $env:USERPROFILE\.ssh\id_ed25519.pub | ssh pi@pi-server.local "mkdir
 # Pi im Netzwerk finden (Standard-Hostname bzw. der oben vergebene):
 ping pi-server.local
 
-# Verbinden:
-ssh pi@pi-server.local
+# Verbinden (<benutzer> = dein im Imager gesetzter Benutzername, z.B. alex):
+ssh <benutzer>@pi-server.local
 ```
 
 Falls `*.local` bei dir nicht auflöst: IP über die Geräteliste deines
@@ -244,7 +261,7 @@ wird erst nach einem neuen Login aktiv):
 
 ```bash
 exit
-ssh pi@pi-server.local
+ssh <benutzer>@pi-server.local
 cd ~/pi-server
 ```
 
@@ -349,7 +366,7 @@ reservierte Adresse hat (funktioniert unabhängig davon, ob WLAN oder
 Ethernet aktiv ist):
 
 ```bash
-ssh pi@pi-server.local
+ssh <benutzer>@pi-server.local
 ip -4 addr show | grep inet
 ```
 
@@ -562,7 +579,7 @@ System der Raspberry Pi Foundation.
    gemäß Schnellstart Schritt 4 sicher außerhalb des Pi aufbewahrt hast)
    auf den neuen Pi kopieren, z. B.:
    ```bash
-   scp ~/pi-server-age-key.txt pi@pi-server.local:~/.config/age/pi-server.txt
+   scp ~/pi-server-age-key.txt <benutzer>@pi-server.local:~/.config/age/pi-server.txt
    ```
 4. rclone erneut verbinden (Schnellstart Schritt 13 — Zugangsdaten sind
    Account-gebunden, nicht Pi-gebunden, aber die lokale rclone-Config muss
