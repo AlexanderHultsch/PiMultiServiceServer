@@ -55,8 +55,11 @@ DETECTED_SUBNET="$(echo "${DETECTED_SUBNET}" | sed -E 's#^([0-9]+\.[0-9]+\.[0-9]
 
 ask TZ "Zeitzone, z.B. 'Europe/Berlin'. Liste: https://en.wikipedia.org/wiki/List_of_tz_database_time_zones" "Europe/Berlin"
 
-ask LAN_SUBNET "Dein Heimnetz-CIDR. Automatisch erkannt anhand der aktiven Netzwerkverbindung dieses Geraets.
+ask LAN_SUBNET "Dein Heimnetz-CIDR (die NETZ-Adresse, nicht die IP des Pi selbst - z.B. 192.168.178.0/24).
 Falls falsch: auf dem Pi 'ip -4 addr show' ausfuehren und das Netz hinter deiner IP ablesen (z.B. 192.168.1.0/24)." "${DETECTED_SUBNET}"
+# Falls versehentlich eine Host-Adresse statt der Netz-Adresse eingegeben wurde
+# (z.B. 192.168.178.53/24 statt 192.168.178.0/24), automatisch korrigieren.
+LAN_SUBNET="$(echo "${LAN_SUBNET}" | sed -E 's#^([0-9]+\.[0-9]+\.[0-9]+)\.[0-9]+(/.*)?$#\1.0/24#')"
 
 ask PI_STATIC_IP "Die feste IP, die der Pi im LAN bekommen soll (DHCP-Reservierung im Router -
 siehe README Abschnitt 'Feste IP fuer den Pi reservieren'). Vorschlag = aktuell erkannte IP dieses Geraets." "${DETECTED_IP}"
