@@ -422,10 +422,39 @@ Alle vier Dienste sollten `running` sein.
 
 ### 10. Pi-hole als Netzwerk-DNS eintragen (Router, manuell)
 
-- Web-UI: `http://${PI_STATIC_IP}:${PORT_PIHOLE_UI}` (nur aus dem LAN erreichbar), Login mit `PIHOLE_PASSWORD`.
-- In der Router-Admin-Oberfläche: DNS-Server für das LAN (meist unter
-  "DHCP-Einstellungen" oder "Internet/WAN") auf `${PI_STATIC_IP}` setzen,
-  damit alle Geräte automatisch über Pi-hole auflösen.
+- **Web-UI aufrufen:** `http://<PI_STATIC_IP>:<PORT_PIHOLE_UI>/admin/` — mit
+  den tatsächlichen Werten aus `.env`, z. B. `http://192.168.178.53:8080/admin/`.
+  Der Pfad **`/admin/` am Ende ist Pflicht** (Pi-hole v6 leitet von der
+  reinen IP/Port-Adresse nicht automatisch dorthin um). Login mit
+  `PIHOLE_PASSWORD`. Nur aus dem LAN erreichbar.
+- **Hinweis "Consider upgrading to HTTPS":** Diese Meldung zeigt Pi-hole
+  standardmäßig an, weil die Oberfläche per HTTP läuft. Unproblematisch für
+  dieses Setup, da die UI ohnehin nur aus dem LAN erreichbar ist (per
+  `ufw`-Regel abgesichert, siehe Schritt 7) — kann einfach ignoriert werden.
+  Wer möchte, kann in der Pi-hole-UI unter **Settings → Web Interface / API**
+  HTTPS mit einem selbstsignierten Zertifikat aktivieren; der Browser zeigt
+  dann allerdings eine Zertifikatswarnung, da das Zertifikat nicht von einer
+  öffentlichen Stelle ausgestellt ist.
+- **Pi-hole als DNS-Server für das gesamte Heimnetz eintragen** — bei einer
+  FRITZ!Box:
+  1. **Heimnetz → Netzwerk → Netzwerkeinstellungen**.
+  2. Ggf. auf **"Weitere Einstellungen anzeigen"** klicken, damit alle
+     Felder sichtbar sind.
+  3. Im Abschnitt zur **IPv4-Konfiguration** das Feld **"Lokaler
+     DNS-Server"** suchen und dort `PI_STATIC_IP` eintragen (z. B.
+     `192.168.178.53`).
+  4. **Übernehmen** klicken. Ab jetzt bekommt jedes Gerät, das per DHCP eine
+     Adresse von der FRITZ!Box erhält, automatisch Pi-hole als DNS-Server
+     zugewiesen.
+
+  **Nicht verwechseln:** Das ist ein anderes Feld als **"MyFRITZ!/DynDNS"**
+  (dient dazu, die FRITZ!Box selbst über einen festen Namen aus dem
+  *Internet* erreichbar zu machen — das Gegenteil von dem, was hier gebraucht
+  wird) und auch ein anderes als der DNS-Server unter **Internet →
+  Zugangsart → DNS-Server** (das betrifft nur, welchen DNS-Server die
+  FRITZ!Box selbst nach außen hin befragt, nicht was den Geräten im LAN per
+  DHCP mitgeteilt wird). Bei anderen Routern heißt das gesuchte Feld meist
+  einfach **"DNS-Server"** in den generellen Netzwerk-/LAN-Einstellungen.
 
 ### 11. Öffentliche Webseite prüfen
 
@@ -441,7 +470,7 @@ Route dorthin führt über `cloudflared`.
 - Web-UI: `http://${PI_STATIC_IP}:${PORT_UPTIME}` (nur LAN), beim ersten
   Aufruf Admin-Account anlegen.
 - Monitore anlegen für: `https://${DOMAIN}` (öffentliche Seite),
-  `http://${PI_STATIC_IP}:${PORT_PIHOLE_UI}` (Pi-hole), sowie einen
+  `http://${PI_STATIC_IP}:${PORT_PIHOLE_UI}/admin/` (Pi-hole), sowie einen
   Internet-Referenz-Check (z. B. `1.1.1.1`).
 
 ### 13. Backup-Ziel verbinden (rclone, interaktiv)
@@ -530,7 +559,7 @@ zum genauen Ablauf stehen in den Kommentaren von `scripts/backup.sh`.
 ## Was kann ich mit Pi-hole eigentlich machen?
 
 Ein kurzer Überblick über die gängigsten Aufgaben in der Pi-hole-Weboberfläche
-(`http://${PI_STATIC_IP}:${PORT_PIHOLE_UI}`):
+(`http://${PI_STATIC_IP}:${PORT_PIHOLE_UI}/admin/`):
 
 - **Query Log** (Menü links): zeigt in Echtzeit jede DNS-Anfrage aus dem
   Netzwerk und ob sie geblockt oder durchgelassen wurde — der schnellste Weg
