@@ -335,11 +335,19 @@ nur:
    ```
    Diesen Wert im Router anstelle der bisherigen `wlan0`-MAC-Adresse eintragen.
 3. `sudo reboot`, danach mit dem Verifikationsbefehl unten prüfen.
-4. Optional, aber empfohlen (vermeidet zwei gleichzeitig aktive Interfaces):
-   WLAN auf dem Pi deaktivieren, sobald das Kabel dauerhaft verbunden ist:
-   ```bash
-   sudo rfkill block wifi
-   ```
+
+**WLAN dabei aktiviert lassen, nicht deaktivieren.** Linux bevorzugt bei
+gleichzeitig aktivem Ethernet und WLAN automatisch die Kabelverbindung
+(bessere Routing-Metrik) — ein zusätzlicher Schritt ist dafür nicht nötig.
+Ein aktiviertes, aber ungenutztes WLAN dient als Rückfalloption: Wird das
+Kabel versehentlich abgezogen oder gelöst, bleibt der Pi trotzdem über WLAN
+erreichbar, statt komplett vom Netz getrennt zu sein. **`sudo rfkill block
+wifi` wird deshalb nicht mehr empfohlen** — dieser Zustand übersteht Reboots
+(siehe Troubleshooting-Eintrag "Nach einem Neustart keine Verbindung mehr,
+WLAN tot") und kann genau die Situation verursachen, die er vermeiden sollte:
+kompletter Verbindungsverlust nach einem Neustart, sobald aus irgendeinem
+Grund kein Ethernet-Link mehr vorhanden ist. Falls WLAN aktuell blockiert
+ist: `sudo rfkill unblock wifi`.
 
 #### Nach dem Speichern
 
@@ -456,6 +464,34 @@ Alle vier Dienste sollten `running` sein.
   DHCP mitgeteilt wird). Bei anderen Routern heißt das gesuchte Feld meist
   einfach **"DNS-Server"** in den generellen Netzwerk-/LAN-Einstellungen.
 
+#### Prüfen, ob es funktioniert
+
+Direkt nach dem Ändern zeigt das Pi-hole-Dashboard meist **`0 q/min`** an —
+das ist normal und kein Fehler: Geräte übernehmen den neuen DNS-Server erst
+bei der nächsten DHCP-Erneuerung, nicht sofort.
+
+**Schnelltest, unabhängig von DHCP** (funktioniert sofort, von jedem Gerät im LAN oder auf dem Pi selbst):
+
+```bash
+nslookup doubleclick.net 192.168.178.53   # PI_STATIC_IP statt Beispiel-IP einsetzen
+```
+
+Kommt ein Ergebnis zurück (auch `0.0.0.0` zählt — das ist ein Block), läuft
+Pi-hole korrekt. Direkt danach im Pi-hole-Dashboard bzw. **Query Log**
+nachsehen — die eine Anfrage sollte dort auftauchen.
+
+**Damit reale Geräte Pi-hole tatsächlich nutzen**, muss deren DHCP-Lease
+erneuert werden:
+- Am einfachsten: FRITZ!Box einmal neu starten — erzwingt bei allen Geräten
+  eine neue Anfrage.
+- Pro Gerät: WLAN kurz aus-/einschalten (Handy) bzw. `ipconfig /release &&
+  ipconfig /renew` (Windows) oder neu verbinden (Mac/Linux).
+
+**Prüfen, welchen DNS-Server ein Gerät gerade tatsächlich verwendet:**
+Windows `ipconfig /all` (Feld "DNS-Server"), Mac Systemeinstellungen →
+Netzwerk → WLAN → Details → DNS, Linux `resolvectl status`, Smartphone in
+den WLAN-Netzwerkdetails.
+
 ### 11. Öffentliche Webseite prüfen
 
 ```bash
@@ -524,8 +560,9 @@ bash scripts/verify.sh
 ```
 
 Prüft: `docker compose config`, alle Dienste laufen, keine Secrets im Git,
-`ufw` Default-Deny aktiv, öffentliche Domain erreichbar — mit
-PASS/FAIL-Ausgabe pro Check.
+`ufw` Default-Deny aktiv, öffentliche Domain erreichbar, `PI_STATIC_IP`
+tatsächlich an einem aktiven Interface gebunden, WLAN nicht blockiert
+während kein Ethernet aktiv ist — mit PASS/FAIL-Ausgabe pro Check.
 
 ### 16. Restore einmal real testen (Pflicht, [M7])
 
@@ -553,6 +590,8 @@ zum genauen Ablauf stehen in den Kommentaren von `scripts/backup.sh`.
 | Nach Reboot nicht mehr unter der reservierten IP erreichbar | Router-Reservierung hängt an der MAC-Adresse des **falschen** Interfaces (z. B. `eth0` reserviert, Pi hängt aber an `wlan0`, oder umgekehrt) | `ip -4 addr show` auf dem Pi, aktives Interface ermitteln, MAC damit im Router abgleichen (Schnellstart Schritt 6) |
 | `ufw`-Regeln passen nicht zum tatsächlichen LAN | `LAN_SUBNET` in `.env` enthält eine Host-Adresse statt der Netz-Adresse (z. B. `192.168.178.53/24` statt `192.168.178.0/24`) | `grep LAN_SUBNET .env` prüfen, bei Bedarf korrigieren, `scripts/01-harden.sh` erneut ausführen |
 | Cloudflare-Dashboard zeigt keinen Menüpunkt "Public Hostname" | Cloudflare hat die Bezeichnung zu "Published Application routes" / "Add published application" geändert (Stand 2026) | Im Tunnel-Detail nach **Published Application routes** suchen, Felder wie in Schnellstart Schritt 8 ausfüllen |
+| Pi-hole-Dashboard zeigt dauerhaft `0 q/min` nach Umstellung des Router-DNS | Geräte haben ihre DHCP-Lease noch nicht erneuert, nutzen also noch den alten DNS-Server | Schnelltest per `nslookup <domain> ${PI_STATIC_IP}`; für echte Geräte Router neu starten oder Lease einzeln erneuern (Schnellstart Schritt 10) |
+| Nach einem Neustart keine Verbindung mehr, WLAN tot (auch über lokale Konsole als "nicht verbunden" sichtbar) | Häufigste Ursache: WLAN wurde per `rfkill block wifi` deaktiviert (z. B. beim Umstieg auf ein LAN-Kabel) — dieser Zustand übersteht Neustarts. Fehlt dann zusätzlich ein aktiver Ethernet-Link, hat der Pi gar keine Netzwerkverbindung mehr | Per Tastatur/Monitor lokal einloggen, `rfkill list` prüfen; steht dort "Soft blocked: yes" bei WLAN → `sudo rfkill unblock wifi`. WLAN danach nicht erneut blockieren (siehe Hinweis in Schnellstart Schritt 6) |
 
 ---
 

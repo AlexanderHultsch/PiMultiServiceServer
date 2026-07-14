@@ -46,12 +46,32 @@ check_domain_reachable() {
   [[ -n "${DOMAIN:-}" && "${DOMAIN}" != "<<DOMAIN>>" ]] || return 1
   curl -fsI --max-time 10 "https://${DOMAIN}" >/dev/null
 }
+check_static_ip_bound() {
+  # Erkennt Drift zwischen .env und der tatsaechlich aktiven Netzwerk-IP
+  # (z.B. falsches Interface im Router reserviert, oder WLAN/LAN vertauscht).
+  [[ -f .env ]] || return 1
+  # shellcheck disable=SC1091
+  set -a; source .env; set +a
+  [[ -n "${PI_STATIC_IP:-}" ]] || return 1
+  ip -4 addr show | grep -q "inet ${PI_STATIC_IP}/"
+}
+check_wifi_not_unexpectedly_blocked() {
+  # Warnt, falls WLAN per rfkill blockiert ist, OBWOHL kein Ethernet-Kabel
+  # aktiv ist - das wuerde den Pi komplett vom Netz trennen (siehe README
+  # Troubleshooting "Nach Neustart keine Verbindung mehr, WLAN tot").
+  command -v rfkill >/dev/null 2>&1 || return 0
+  rfkill list wifi 2>/dev/null | grep -qi "Soft blocked: yes" || return 0
+  ip -4 addr show eth0 2>/dev/null | grep -q "inet " && return 0
+  return 1
+}
 
 check "docker compose config ist gueltig" check_compose_config
 check "Alle Compose-Dienste laufen" check_compose_running
 check "Keine Secrets/data/ im Git" check_no_secrets_in_git
 check "ufw: aktiv + Default-Deny eingehend" check_ufw_default_deny
 check "Oeffentliche Webseite unter https://\${DOMAIN} erreichbar" check_domain_reachable
+check "PI_STATIC_IP ist tatsaechlich an einem Interface aktiv" check_static_ip_bound
+check "WLAN nicht blockiert, waehrend kein Ethernet aktiv ist" check_wifi_not_unexpectedly_blocked
 
 echo "=================================================================="
 echo "Ergebnis: ${PASS} bestanden, ${FAIL} fehlgeschlagen"
