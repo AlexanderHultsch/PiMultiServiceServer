@@ -1,6 +1,6 @@
 # SPEC: Raspberry Pi 4 – Sicherer Multi-Service-Server
 
-**Version:** 2.1 (hardware-agnostisch)
+**Version:** 2.2 (hardware-agnostisch)
 **Zielgruppe dieses Dokuments:** KI-Coding-Agent (Claude Code)
 **Format:** Deklarative Spezifikation. Alle Werte in Abschnitt 1 sind die *einzige Quelle der Wahrheit* (Single Source of Truth) und werden überall referenziert.
 
@@ -143,6 +143,7 @@ Format je Dienst: **Image**, **Zweck**, **Exposure**, **Ports**, **Volumes**, **
 - **Env:** `TZ=${TZ}`, Admin-Passwort = `${PIHOLE_PASSWORD}`
   > Env-Variablennamen sind Pi-hole-v6-spezifisch (z. B. `FTLCONF_webserver_api_password`). Der Agent MUSS den exakten Namen gegen die gepinnte Version prüfen.
 - **Upstream-DNS:** verschlüsselt bevorzugt (Quad9 `9.9.9.9` oder Cloudflare `1.1.1.1`); optional DoH-Sidecar.
+- **`FTLCONF_dns_listeningMode: "ALL"` ist PFLICHT** (in v2.2 ergänzt, real auf Hardware verifiziert): Pi-hole v6 defaultet sonst auf `dns.listeningMode=LOCAL`. Da `pihole` in einem Docker-Bridge-Netz läuft, hält FTL dabei nur Anfragen aus dem eigenen Bridge-Subnetz für "lokal" und verwirft echte LAN-Clients stillschweigend (Log: `ignoring query from non-local network ...`) — der Dienst läuft, antwortet aber niemandem im LAN. `ALL` ist hier sicher, weil Port 53 laut [M3]/[N4] ohnehin nur an `${PI_STATIC_IP}` gebunden ist, nicht an `0.0.0.0`.
 
 ### 5.2 `web`
 - **Image:** `nginx:<<PIN_TAG>>-alpine` (Alternative: `caddy:<<PIN_TAG>>-alpine`)
@@ -232,6 +233,8 @@ services:
       TZ: ${TZ}
       # Pi-hole v6: exakten Passwort-Env-Namen gegen Doku verifizieren
       FTLCONF_webserver_api_password: ${PIHOLE_PASSWORD}
+      # Pflicht in Docker-Netzwerken, siehe 5.1 - sonst werden LAN-Clients verworfen
+      FTLCONF_dns_listeningMode: "ALL"
     ports:
       - "${PI_STATIC_IP}:${PORT_DNS}:53/tcp"
       - "${PI_STATIC_IP}:${PORT_DNS}:53/udp"
@@ -400,5 +403,6 @@ abgeschlossen gilt.
 
 - **v2.0:** `AGE_RECIPIENT` ergänzt (technische Notwendigkeit für 8.2, ursprünglich nicht in Abschnitt 1 vorgesehen); `git` in 7.1 ergänzt; Selbstaussperr-Schutz in 7.2 ergänzt.
 - **v2.1:** Abschnitt 5.6 (`claude-code`, optionales On-Demand-Debug-Werkzeug) sowie [M9]/[N6] ergänzt; Repo-Struktur (Abschnitt 4) um `CLAUDE.md`, diese Datei und `scripts/install-claude-code.sh` erweitert; Umsetzungstabelle (Abschnitt 9) um Zeile 10 ergänzt.
+- **v2.2:** `FTLCONF_dns_listeningMode: "ALL"` als Pflicht-Env für `pihole` ergänzt (5.1, 6.1) — ohne diese Einstellung verwirft Pi-hole v6 im Docker-Bridge-Netz echte LAN-Clients stillschweigend als "non-local"; auf realer Hardware gefunden und verifiziert.
 
-*Ende SPEC v2.1 — hardware-frei, agenten-optimiert.*
+*Ende SPEC v2.2 — hardware-frei, agenten-optimiert.*

@@ -1,7 +1,7 @@
 # PiMultiServiceServer — Sicherer Multi-Service-Server für Raspberry Pi 4
 
 Dieses Repository baut aus einem Raspberry Pi 4 einen kleinen, sicheren
-Heimserver auf. Setzt `raspberry-pi-4-spezifikation.md` (v2.1) um, die als
+Heimserver auf. Setzt `raspberry-pi-4-spezifikation.md` (v2.2) um, die als
 maßgebliche Quelle der Wahrheit für alle technischen Entscheidungen dient.
 
 ## Was am Ende dabei herauskommt
@@ -592,6 +592,16 @@ zum genauen Ablauf stehen in den Kommentaren von `scripts/backup.sh`.
 | Cloudflare-Dashboard zeigt keinen Menüpunkt "Public Hostname" | Cloudflare hat die Bezeichnung zu "Published Application routes" / "Add published application" geändert (Stand 2026) | Im Tunnel-Detail nach **Published Application routes** suchen, Felder wie in Schnellstart Schritt 8 ausfüllen |
 | Pi-hole-Dashboard zeigt dauerhaft `0 q/min` nach Umstellung des Router-DNS | Geräte haben ihre DHCP-Lease noch nicht erneuert, nutzen also noch den alten DNS-Server | Schnelltest per `nslookup <domain> ${PI_STATIC_IP}`; für echte Geräte Router neu starten oder Lease einzeln erneuern (Schnellstart Schritt 10) |
 | Nach einem Neustart keine Verbindung mehr, WLAN tot (auch über lokale Konsole als "nicht verbunden" sichtbar) | Häufigste Ursache: WLAN wurde per `rfkill block wifi` deaktiviert (z. B. beim Umstieg auf ein LAN-Kabel) — dieser Zustand übersteht Neustarts. Fehlt dann zusätzlich ein aktiver Ethernet-Link, hat der Pi gar keine Netzwerkverbindung mehr | Per Tastatur/Monitor lokal einloggen, `rfkill list` prüfen; steht dort "Soft blocked: yes" bei WLAN → `sudo rfkill unblock wifi`. WLAN danach nicht erneut blockieren (siehe Hinweis in Schnellstart Schritt 6) |
+| Pi unter `PI_STATIC_IP` komplett unerreichbar, DNS für das ganze LAN fällt aus | Physische Ethernet-Verbindung getrennt (Kabel raus/lose) — `eth0` hat dann gar keine IP mehr, der Pi kann parallel per DHCP auf `wlan0` ausweichen und landet auf einer völlig anderen Adresse | `ip link` auf dem Pi: Zeigt `eth0` "NO-CARRIER"/"state DOWN"? → Kabel/Port prüfen. Bevor man DNS/Software verdächtigt: immer zuerst die physische Verbindung prüfen (`ip link`, `dmesg`), das sieht sonst wie ein reines DNS-Problem aus |
+| Pi-hole läuft (`healthy`), Port 53 ist erreichbar, aber echte Geräte im LAN bekommen trotzdem keine Antwort | Pi-hole v6 verwendet standardmäßig `dns.listeningMode=LOCAL`. In einem Docker-Bridge-Netz hält FTL dabei nur Anfragen aus dem eigenen Bridge-Subnetz für "lokal" und verwirft echte LAN-Clients stillschweigend | Pi-hole-Log auf "ignoring query from non-local network ..." prüfen; `FTLCONF_dns_listeningMode: "ALL"` ist bereits in `docker-compose.yml` gesetzt (siehe Kommentar dort) — bei älteren Ständen dieses Repos ggf. nachtragen und `docker compose up -d` erneut ausführen |
+| `docker compose ps` zeigte vor einer Weile "running", Problem besteht aber weiter | Status kann veraltet sein — Container können zwischenzeitlich abgestürzt/neu gestartet sein | `docker compose ps` **live neu ausführen**, nicht auf einen älteren Blick verlassen, bevor man weiter nach der Ursache sucht |
+| DNS-Test von einem Test-Container auf demselben Docker-Bridge-Netz schlägt fehl, obwohl von echten LAN-Geräten aus alles funktioniert | Docker-NAT-"Hairpin"-Limitation: ein Container, der den eigenen host-published Port über die Bridge anspricht, kann daran scheitern — sieht wie ein Bug aus, ist aber eine bekannte Docker-Eigenheit | Zum Testen immer von einem echten LAN-Client oder direkt vom Host aus prüfen (`nslookup <domain> ${PI_STATIC_IP}`), nicht von einem anderen Container auf derselben Bridge |
+
+**Vorsicht beim Live-Debugging von DNS-Problemen:** keinen zweiten,
+unkonfigurierten Pi-hole-Testcontainer per `docker run --network host
+pihole/...` starten, während der eigentliche Dienst bereits Port 53 belegt —
+das konkurriert unnötig um denselben Port. Stattdessen direkt vom Host aus
+mit `nslookup`/`dig` gegen `${PI_STATIC_IP}` testen.
 
 ---
 
@@ -716,6 +726,29 @@ Startet eine interaktive Sitzung, die automatisch `CLAUDE.md` und
 Regeln, nach denen dieses Projekt aufgebaut wurde, gelten dann auch für die
 Debugging-Sitzung. Nach Ende der Sitzung läuft nichts mehr im Hintergrund;
 es gibt bewusst keinen systemd-Dienst und keinen Autostart dafür.
+
+### Nach einer unterbrochenen SSH-Verbindung wieder einsteigen
+
+Bricht die SSH-Verbindung während einer laufenden `claude`-Sitzung ab (WLAN
+weg, Laptop zugeklappt, …): **nichts geht verloren.** Claude Code schreibt
+den Sitzungsverlauf fortlaufend auf die Platte, unabhängig von der
+SSH-Verbindung. Nach dem erneuten Einloggen im selben Ordner:
+
+```bash
+cd ~/pi-server
+claude --continue   # laedt automatisch die zuletzt aktive Sitzung dieses Ordners
+```
+
+Gibt es mehrere unterbrochene/parallele Sitzungen und die letzte ist nicht
+die richtige:
+
+```bash
+claude --resume   # zeigt eine Auswahlliste aller gespeicherten Sitzungen dieses Ordners
+```
+
+Beides funktioniert nur, wenn man sich **im selben Verzeichnis** befindet, in
+dem die Sitzung ursprünglich gestartet wurde (`~/pi-server`) — Sitzungen sind
+pro Arbeitsverzeichnis gespeichert.
 
 ### Hardware-Hinweis
 
