@@ -646,16 +646,63 @@ https://claude.ai/install.sh | bash`): dieser hat auf ARM64/Raspberry Pi
 bekannte Probleme (meldet Erfolg, installiert die Binary aber nicht
 zuverlässig mit).
 
+Während der Installation kann eine Warnung wie `npm warn allow-scripts ...
+not yet covered by allowScripts` erscheinen (neuere npm-Versionen fragen vor
+Install-Scripts von Paketen nach). In der Praxis hat die CLI danach trotzdem
+funktioniert — mit `claude --version` prüfen (sollte eine Versionsnummer wie
+`2.1.210 (Claude Code)` zeigen). Falls nicht: `npm approve-scripts
+--allow-scripts-pending` ausführen und erneut prüfen.
+
 ### Anmelden (einmalig, headless-tauglich)
 
-Ein Raspberry Pi im Lite-Modus hat keinen Browser für den normalen
-OAuth-Login. Zwei Alternativen:
+Ein Raspberry Pi im Lite-Modus hat keinen Browser. **Wichtig:** Ist
+`ANTHROPIC_API_KEY` oder `CLAUDE_CODE_OAUTH_TOKEN` bereits als
+Umgebungsvariable gesetzt, **bevor** `claude` das erste Mal gestartet wird,
+überspringt die CLI das interaktive Anmelde-Menü automatisch. Das ist auf
+einem headless-Gerät der einfachste Weg — deshalb zuerst dauerhaft setzen,
+dann `claude` starten.
 
-- **API-Key:** `export ANTHROPIC_API_KEY=<api-key>` (z. B. in `~/.bashrc`
-  ergänzen, damit er dauerhaft gesetzt ist).
-- **Claude Pro/Max-Abo:** auf einem Gerät **mit** Browser `claude
-  setup-token` ausführen, das erzeugte Token auf dem Pi als
-  `CLAUDE_CODE_OAUTH_TOKEN` setzen.
+**Variante A — API-Key (Anthropic Console):**
+
+```bash
+echo 'export ANTHROPIC_API_KEY=<dein-api-key>' >> ~/.bashrc
+source ~/.bashrc
+```
+
+Der `echo ... >> ~/.bashrc`-Befehl hängt die Zeile dauerhaft an die
+Shell-Konfiguration an, damit die Variable bei jeder neuen Anmeldung
+automatisch gesetzt ist — nicht nur für die aktuelle Sitzung. `source
+~/.bashrc` wendet die Änderung sofort auf die schon offene Sitzung an, ohne
+dass man sich neu einloggen muss.
+
+**Variante B — Claude Pro/Max-Abo:**
+
+Auf einem Gerät **mit** Browser (eigener Computer, nicht der Pi) einmalig:
+
+```bash
+claude setup-token
+```
+
+Führt durch einen Browser-Login und gibt am Ende ein Token aus. Dieses Token
+dann genauso dauerhaft auf dem Pi hinterlegen:
+
+```bash
+echo 'export CLAUDE_CODE_OAUTH_TOKEN=<das-ausgegebene-token>' >> ~/.bashrc
+source ~/.bashrc
+```
+
+**Falls trotzdem das Menü "Select login method" erscheint** (passiert, wenn
+`claude` gestartet wird, bevor eine der beiden Variablen gesetzt ist) — die
+drei Optionen bedeuten:
+
+| Menüpunkt | Bedeutung | Für den headless Pi |
+|---|---|---|
+| "Account with subscription" | Claude.ai Pro/Max-Login per Browser-OAuth | Auf dem Pi **abbrechen** (kein Browser vorhanden) — stattdessen Variante B von einem Gerät mit Browser aus vorbereiten |
+| "Anthropic Console account" | API-Key-basierte Anmeldung | Entspricht Variante A — einfacher direkt vorab per `ANTHROPIC_API_KEY` setzen, dann erscheint das Menü gar nicht erst |
+| "3rd party platform" | Zugriff über AWS Bedrock / Google Vertex AI o. ä. | Nur relevant, falls Claude bereits über eine dieser Plattformen bezogen wird — für dieses Projekt nicht nötig |
+
+Am einfachsten bleibt: Variante A oder B **vorher** einrichten, dann taucht
+das Menü erst gar nicht auf.
 
 ### Verwendung
 
