@@ -5,6 +5,24 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(dirname "$SCRIPT_DIR")"
 
+if [[ "$(id -u)" -eq 0 ]]; then
+  echo "FEHLER: bitte OHNE sudo ausfuehren:  bash scripts/01-harden.sh" >&2
+  echo "(Das Skript prueft deinen SSH-Key unter \$HOME und nutzt sudo selbst, wo noetig.)" >&2
+  exit 1
+fi
+
+if [[ ! -f "${REPO_ROOT}/.env" ]]; then
+  echo "FEHLER: ${REPO_ROOT}/.env fehlt." >&2
+  echo "Zuerst ausfuehren:  bash scripts/setup-env.sh" >&2
+  exit 1
+fi
+
+if ! command -v ufw >/dev/null 2>&1; then
+  echo "FEHLER: ufw ist nicht installiert." >&2
+  echo "Zuerst ausfuehren:  bash scripts/00-bootstrap.sh" >&2
+  exit 1
+fi
+
 # shellcheck disable=SC1091
 set -a; source "${REPO_ROOT}/.env"; set +a
 

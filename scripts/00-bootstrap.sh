@@ -3,6 +3,13 @@
 # Idempotent: kann gefahrlos mehrfach ausgefuehrt werden.
 set -euo pipefail
 
+if [[ "$(id -u)" -eq 0 ]]; then
+  echo "FEHLER: bitte OHNE sudo ausfuehren:  bash scripts/00-bootstrap.sh" >&2
+  echo "(Sonst wird root statt deinem Nutzer zur docker-Gruppe hinzugefuegt." >&2
+  echo " Das Skript nutzt sudo selbst, wo noetig.)" >&2
+  exit 1
+fi
+
 echo "==> System aktualisieren"
 sudo apt update && sudo apt full-upgrade -y
 

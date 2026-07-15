@@ -1,6 +1,6 @@
 # SPEC: Raspberry Pi 4 – Sicherer Multi-Service-Server
 
-**Version:** 2.2 (hardware-agnostisch)
+**Version:** 2.3 (hardware-agnostisch)
 **Zielgruppe dieses Dokuments:** KI-Coding-Agent (Claude Code)
 **Format:** Deklarative Spezifikation. Alle Werte in Abschnitt 1 sind die *einzige Quelle der Wahrheit* (Single Source of Truth) und werden überall referenziert.
 
@@ -357,6 +357,16 @@ abbrechen (Selbstaussperr-Schutz, in v2.0 als Implementierungsdetail ergänzt).
 5. Rotation: `${BACKUP_RETENTION_DAILY}` tägliche + `${BACKUP_RETENTION_WEEKLY}` wöchentliche Stände behalten, ältere löschen.
 6. Als Cron-Job (nächtlich) einrichten.
 
+**Betriebsanforderungen (v2.3, aus Praxis-Verifikation):**
+- Läuft als **root** (Cron-Job in der root-crontab): die Dateien unter
+  `data/` gehören den Container-Nutzern; ein tar ohne root scheitert an
+  "Permission denied" — beim nächtlichen Lauf unbemerkt.
+- `rclone` wird dabei als **Repo-Besitzer** (normaler Nutzer) ausgeführt,
+  damit dessen `~/.config/rclone` verwendet wird und Token-Erneuerungen
+  die Konfigurationsdatei nicht auf root umkippen.
+- tar-Exit-Code 1 ("file changed as we read it") wird akzeptiert — die
+  Container schreiben während des Backups weiter in ihre Datenbanken.
+
 ### 8.3 Restore-Prozedur
 1. OS auf das Boot-Medium flashen, `00-bootstrap.sh` + `01-harden.sh` ausführen.
 2. Repo klonen.
@@ -404,5 +414,6 @@ abgeschlossen gilt.
 - **v2.0:** `AGE_RECIPIENT` ergänzt (technische Notwendigkeit für 8.2, ursprünglich nicht in Abschnitt 1 vorgesehen); `git` in 7.1 ergänzt; Selbstaussperr-Schutz in 7.2 ergänzt.
 - **v2.1:** Abschnitt 5.6 (`claude-code`, optionales On-Demand-Debug-Werkzeug) sowie [M9]/[N6] ergänzt; Repo-Struktur (Abschnitt 4) um `CLAUDE.md`, diese Datei und `scripts/install-claude-code.sh` erweitert; Umsetzungstabelle (Abschnitt 9) um Zeile 10 ergänzt.
 - **v2.2:** `FTLCONF_dns_listeningMode: "ALL"` als Pflicht-Env für `pihole` ergänzt (5.1, 6.1) — ohne diese Einstellung verwirft Pi-hole v6 im Docker-Bridge-Netz echte LAN-Clients stillschweigend als "non-local"; auf realer Hardware gefunden und verifiziert.
+- **v2.3:** Betriebsanforderungen für `backup.sh` präzisiert (8.2): läuft als root (root-crontab), da `data/` den Container-Nutzern gehört; rclone dabei als Repo-Besitzer; tar-Exit-Code 1 bei laufenden Containern akzeptiert. Skripte erhalten Selbstschutz-Guards (mit/ohne sudo, fehlende `.env`/`ufw`).
 
-*Ende SPEC v2.2 — hardware-frei, agenten-optimiert.*
+*Ende SPEC v2.3 — hardware-frei, agenten-optimiert.*

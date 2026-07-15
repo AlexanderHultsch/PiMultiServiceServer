@@ -8,6 +8,13 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(dirname "$SCRIPT_DIR")"
 ENV_FILE="${REPO_ROOT}/.env"
 
+if [[ "$(id -u)" -eq 0 ]]; then
+  echo "FEHLER: bitte OHNE sudo ausfuehren:  bash scripts/setup-env.sh" >&2
+  echo "Sonst gehoeren .env und der age-Schluessel root statt deinem Nutzer," >&2
+  echo "und der age-Schluessel landet unter /root statt in deinem Home." >&2
+  exit 1
+fi
+
 if [[ -f "${ENV_FILE}" ]]; then
   read -r -p ".env existiert bereits. Ueberschreiben? [y/N] " confirm
   [[ "${confirm}" =~ ^[Yy]$ ]] || { echo "Abgebrochen, bestehende .env bleibt unveraendert."; exit 0; }
@@ -59,10 +66,23 @@ ask LAN_SUBNET "Dein Heimnetz-CIDR (die NETZ-Adresse, nicht die IP des Pi selbst
 Falls falsch: auf dem Pi 'ip -4 addr show' ausfuehren und das Netz hinter deiner IP ablesen (z.B. 192.168.1.0/24)." "${DETECTED_SUBNET}"
 # Falls versehentlich eine Host-Adresse statt der Netz-Adresse eingegeben wurde
 # (z.B. 192.168.178.53/24 statt 192.168.178.0/24), automatisch korrigieren.
-LAN_SUBNET="$(echo "${LAN_SUBNET}" | sed -E 's#^([0-9]+\.[0-9]+\.[0-9]+)\.[0-9]+(/.*)?$#\1.0/24#')"
+# Nur bei /24 bzw. fehlender Prefix-Laenge - andere Netze (/16, /8, ...)
+# bleiben bewusst unangetastet.
+if [[ "${LAN_SUBNET}" =~ ^([0-9]+\.[0-9]+\.[0-9]+)\.[0-9]+(/24)?$ ]]; then
+  LAN_SUBNET="${BASH_REMATCH[1]}.0/24"
+fi
 
 ask PI_STATIC_IP "Die feste IP, die der Pi im LAN bekommen soll (DHCP-Reservierung im Router -
 siehe README Abschnitt 'Feste IP fuer den Pi reservieren'). Vorschlag = aktuell erkannte IP dieses Geraets." "${DETECTED_IP}"
+
+# Plausibilitaet: bei einem /24-Netz muessen die ersten drei Oktette uebereinstimmen.
+if [[ "${LAN_SUBNET}" == */24 ]]; then
+  NET_PREFIX="${LAN_SUBNET%.*}"
+  if [[ "${PI_STATIC_IP}" != "${NET_PREFIX}."* ]]; then
+    echo "WARNUNG: PI_STATIC_IP (${PI_STATIC_IP}) liegt nicht im LAN_SUBNET (${LAN_SUBNET})."
+    echo "Firewall-Regeln und Port-Bindungen passen dann nicht zusammen - bitte pruefen."
+  fi
+fi
 
 ask PORT_PIHOLE_UI "Host-Port fuer die Pi-hole Weboberflaeche (nur im LAN erreichbar). In der Regel unveraendert lassen." "8080"
 ask PORT_DNS "Port fuer DNS. Muss 53 sein, ausser du weisst genau warum du das aenderst." "53"
@@ -76,6 +96,10 @@ while [[ -z "${DOMAIN}" ]]; do
   echo "DOMAIN darf nicht leer sein."
   ask DOMAIN "Deine oeffentliche Domain, siehe Hinweis oben." ""
 done
+# Haeufiger Copy-Paste-Fehler: URL statt Domain eingefuegt -> bereinigen.
+DOMAIN="${DOMAIN#https://}"
+DOMAIN="${DOMAIN#http://}"
+DOMAIN="${DOMAIN%%/*}"
 
 ask_secret PIHOLE_PASSWORD "Admin-Passwort fuer die Pi-hole Weboberflaeche. Frei waehlbar, wird jetzt nur lokal
 in .env gespeichert (nicht auf einem Server abgefragt). Leer lassen = zufaelliges, sicheres Passwort wird erzeugt."

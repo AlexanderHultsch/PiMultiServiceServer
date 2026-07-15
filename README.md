@@ -1,7 +1,7 @@
 # PiMultiServiceServer — Sicherer Multi-Service-Server für Raspberry Pi 4
 
 Dieses Repository baut aus einem Raspberry Pi 4 einen kleinen, sicheren
-Heimserver auf. Setzt `raspberry-pi-4-spezifikation.md` (v2.2) um, die als
+Heimserver auf. Setzt `raspberry-pi-4-spezifikation.md` (v2.3) um, die als
 maßgebliche Quelle der Wahrheit für alle technischen Entscheidungen dient.
 
 ## Was am Ende dabei herauskommt
@@ -74,47 +74,6 @@ zwingend eine Cloudflare-/Router-Weboberfläche brauchen.
 
 ---
 
-## Verwendete Image-Versionen
-
-Gegen die jeweils aktuelle stabile Version verifiziert und auf echter
-Raspberry-Pi-4-Hardware erfolgreich getestet (alle vier Container
-`running`/`healthy`, öffentliche Seite über den Cloudflare-Tunnel mit
-`HTTP/2 200` erreichbar). `:latest` wird laut Spezifikation nirgends
-verwendet.
-
-| Dienst | Image | Tag |
-|---|---|---|
-| Pi-hole | `pihole/pihole` | `2026.07.2` |
-| Web (statisch) | `nginx` | `1.30.3-alpine` |
-| Cloudflare Tunnel | `cloudflare/cloudflared` | `2026.7.0` |
-| Uptime Kuma | `louislam/uptime-kuma` | `2.4.0` |
-
-Neue Version einsetzen: Tag in `docker-compose.yml` ändern,
-`docker compose pull && docker compose up -d`, diese Tabelle aktualisieren.
-
----
-
-## Werte-Referenz: welcher Platzhalter kommt woher
-
-Alle Werte werden von `scripts/setup-env.sh` interaktiv abgefragt bzw. (bei
-`AGE_RECIPIENT`) automatisch erzeugt — diese Tabelle ist die Kurzreferenz,
-falls du `.env` von Hand anpassen willst.
-
-| Variable | Bedeutung | Woher bekommst du den Wert? |
-|---|---|---|
-| `TZ` | Zeitzone aller Container | Z. B. `Europe/Berlin`. Liste: [Wikipedia tz-database](https://en.wikipedia.org/wiki/List_of_tz_database_time_zones) |
-| `LAN_SUBNET` | Heimnetz-CIDR für Firewall-Regeln | Wird automatisch erkannt; manuell prüfen mit `ip -4 addr show` auf dem Pi |
-| `PI_STATIC_IP` | Feste IP des Pi im LAN | Frei wählbar, muss als DHCP-Reservierung im Router eingetragen werden (Anleitung in Schnellstart Schritt 6) |
-| `PORT_PIHOLE_UI` / `PORT_DNS` / `PORT_UPTIME` | Feste Ports für Pi-hole-UI/DNS/Uptime Kuma | Vorgegebene Defaults, i. d. R. unverändert lassen |
-| `DOMAIN` | Öffentliche Domain der Webseite | Eigene Domain, verwaltet als "Zone" in deinem Cloudflare-Account (siehe Voraussetzungen) |
-| `PIHOLE_PASSWORD` | Admin-Passwort Pi-hole | Frei wählbar — `setup-env.sh` kann auch automatisch ein sicheres Passwort generieren |
-| `CLOUDFLARE_TUNNEL_TOKEN` | Tunnel-Token (Secret) | Aus dem Cloudflare Zero-Trust-Dashboard beim Anlegen des Tunnels (Schnellstart Schritt 8) |
-| `BACKUP_REMOTE` | rclone-Remote-Ziel für Backups | Name des rclone-Remotes, das du mit `rclone config` einrichtest (Schnellstart Schritt 13) |
-| `BACKUP_RETENTION_DAILY` / `_WEEKLY` | Anzahl aufbewahrter Backup-Stände | Frei wählbare Zahlen, Default 7 / 4 |
-| `AGE_RECIPIENT` | age-Public-Key zur Backup-Verschlüsselung | Wird von `setup-env.sh` automatisch erzeugt (age-Schlüsselpaar); technisch notwendig, in der SPEC ergänzt |
-
----
-
 ## Voraussetzungen
 
 - Ein Computer (Windows/Mac/Linux) zum Flashen der SD-Karte und für SSH.
@@ -145,6 +104,32 @@ seit Windows 10 vorinstalliert), oder PuTTYgen verwenden.
 ---
 
 ## Schnellstart (Copy & Paste)
+
+**Alle 16 Schritte im Überblick** — Details folgen darunter:
+
+| # | Schritt | Wo |
+|---|---|---|
+| 1 | SD-Karte flashen, SSH vorbereiten | Eigener Computer |
+| 2 | Per SSH verbinden | Eigener Computer |
+| 3 | Repo klonen | Pi |
+| 4 | `.env` per Assistent erzeugen | Pi |
+| 5 | Bootstrap (Docker, Pakete) | Pi |
+| 6 | Feste IP reservieren | Router |
+| 7 | Härtung (SSH, Firewall) | Pi |
+| 8 | Cloudflare Tunnel anlegen | Cloudflare-Dashboard |
+| 9 | Dienste starten | Pi |
+| 10 | Pi-hole als Netzwerk-DNS | Router |
+| 11 | Öffentliche Webseite prüfen | Pi |
+| 12 | Uptime Kuma einrichten | Browser (LAN) |
+| 13 | Backup-Ziel verbinden (rclone) | Pi |
+| 14 | Backup testen + Cron einrichten | Pi |
+| 15 | Gesamt-Verifikation | Pi |
+| 16 | Restore-Test | Frisches System |
+
+> **Sudo-Konvention:** Alle Skripte **ohne** `sudo` starten — sie fordern
+> root-Rechte selbst an, wo nötig, und brechen mit klarer Meldung ab, wenn
+> etwas fehlt. Einzige Ausnahme: `scripts/backup.sh` braucht
+> `sudo bash scripts/backup.sh` (Begründung in Schritt 14).
 
 ### 1. SD-Karte flashen und SSH vorbereiten
 
@@ -495,7 +480,7 @@ den WLAN-Netzwerkdetails.
 ### 11. Öffentliche Webseite prüfen
 
 ```bash
-curl -I https://${DOMAIN}
+curl -I https://deine-domain.de   # <- eigene Domain aus .env einsetzen
 ```
 
 Erwartet: `HTTP/2 200`. `web` selbst hat **keinen** Host-Port — die einzige
@@ -503,10 +488,10 @@ Route dorthin führt über `cloudflared`.
 
 ### 12. Uptime Kuma einrichten
 
-- Web-UI: `http://${PI_STATIC_IP}:${PORT_UPTIME}` (nur LAN), beim ersten
-  Aufruf Admin-Account anlegen.
-- Monitore anlegen für: `https://${DOMAIN}` (öffentliche Seite),
-  `http://${PI_STATIC_IP}:${PORT_PIHOLE_UI}/admin/` (Pi-hole), sowie einen
+- Web-UI: `http://<PI_STATIC_IP>:3001` (nur LAN), z. B.
+  `http://192.168.178.53:3001` — beim ersten Aufruf Admin-Account anlegen.
+- Monitore anlegen für: die öffentliche Webseite (`https://deine-domain.de`),
+  Pi-hole (`http://<PI_STATIC_IP>:8080/admin/`), sowie einen
   Internet-Referenz-Check (z. B. `1.1.1.1`).
 
 ### 13. Backup-Ziel verbinden (rclone, interaktiv)
@@ -532,26 +517,35 @@ Im interaktiven Menü (Beispiel für OneDrive):
 6. Laufwerk aus der Liste bestätigen (meist `0`), dann `y`.
 7. `q` zum Beenden.
 
-Testen:
+Testen (mit dem eben vergebenen Remote-Namen):
 
 ```bash
-rclone lsd "${BACKUP_REMOTE%%:*}:"
+rclone lsd onedrive:
 ```
 
 ### 14. Backup ausführen und automatisieren
 
-Manuell testen:
+Manuell testen — **hier ausnahmsweise mit `sudo`**, weil die Dateien unter
+`data/` den Container-Nutzern gehören und nur root sie vollständig lesen
+kann (der Upload per rclone läuft trotzdem automatisch unter deinem
+normalen Nutzer, damit deine rclone-Anmeldung verwendet wird):
 
 ```bash
-bash scripts/backup.sh
+sudo bash scripts/backup.sh
 ```
 
-Als nächtlichen Cron-Job einrichten (idempotent — mehrfaches Ausführen legt
-den Eintrag nicht doppelt an):
+Als nächtlichen Cron-Job einrichten (landet aus demselben Grund in der
+root-crontab; idempotent — mehrfaches Ausführen legt den Eintrag nicht
+doppelt an):
 
 ```bash
 bash scripts/install-backup-cron.sh
 ```
+
+**Wichtig, einmalig:** Der private age-Schlüssel
+(`~/.config/age/pi-server.txt`) wird **nicht** mitgesichert — ohne ihn sind
+alle Backups wertlos. Jetzt an einen sicheren Ort außerhalb des Pi kopieren
+(Passwort-Manager, USB-Stick), falls noch nicht geschehen.
 
 ### 15. Alles auf einmal verifizieren
 
@@ -585,7 +579,7 @@ zum genauen Ablauf stehen in den Kommentaren von `scripts/backup.sh`.
 | Pi-hole-UI unter `PI_STATIC_IP` nicht erreichbar | `PI_STATIC_IP` stimmt nicht mit tatsächlicher Pi-IP überein, oder `ufw`-Regel fehlt | `ip -4 addr show` auf dem Pi vs. `.env` vergleichen; `sudo ufw status verbose` |
 | Geräte im LAN nutzen Pi-hole nicht als DNS | Router-DNS-Einstellung noch nicht gesetzt oder Geräte-Cache | Router-DNS-Setting prüfen (Schnellstart Schritt 10); betroffenes Gerät neu verbinden |
 | `scripts/01-harden.sh` bricht mit Fehler ab | Kein Public Key in `~/.ssh/authorized_keys` | Key wie in Schnellstart Schritt 1 hinterlegen, dann erneut ausführen |
-| `scripts/backup.sh` schlägt bei `rclone` fehl | Remote nicht konfiguriert oder Name stimmt nicht mit `BACKUP_REMOTE` überein | `rclone listremotes`; Schnellstart Schritt 13 wiederholen |
+| `scripts/backup.sh` schlägt bei `rclone` fehl | Remote nicht konfiguriert oder Name stimmt nicht mit `BACKUP_REMOTE` überein. Wichtig: `rclone config` als normaler Nutzer ausführen (nicht mit sudo) — das Backup nutzt automatisch dessen Konfiguration | `rclone listremotes` (ohne sudo); Schnellstart Schritt 13 wiederholen |
 | `-bash: git: command not found` beim Klonen | Raspberry Pi OS Lite hat `git` nicht vorinstalliert, `00-bootstrap.sh` (installiert es) läuft erst nach dem Klonen | `sudo apt update && sudo apt install -y git`, dann erneut klonen (Schnellstart Schritt 3) |
 | Nach Reboot nicht mehr unter der reservierten IP erreichbar | Router-Reservierung hängt an der MAC-Adresse des **falschen** Interfaces (z. B. `eth0` reserviert, Pi hängt aber an `wlan0`, oder umgekehrt) | `ip -4 addr show` auf dem Pi, aktives Interface ermitteln, MAC damit im Router abgleichen (Schnellstart Schritt 6) |
 | `ufw`-Regeln passen nicht zum tatsächlichen LAN | `LAN_SUBNET` in `.env` enthält eine Host-Adresse statt der Netz-Adresse (z. B. `192.168.178.53/24` statt `192.168.178.0/24`) | `grep LAN_SUBNET .env` prüfen, bei Bedarf korrigieren, `scripts/01-harden.sh` erneut ausführen |
@@ -756,6 +750,47 @@ Anthropics offizielles Minimum für die CLI liegt bei 4 GB RAM. Auf einem Pi 4
 mit 1–2 GB RAM konkurriert eine aktive Sitzung mit den laufenden Containern
 um Arbeitsspeicher — für dieses optionale Feature empfiehlt sich ein Pi 4 mit
 mindestens 4 GB RAM.
+
+---
+
+## Referenz: verwendete Image-Versionen
+
+Gegen die jeweils aktuelle stabile Version verifiziert und auf echter
+Raspberry-Pi-4-Hardware erfolgreich getestet (alle vier Container
+`running`/`healthy`, öffentliche Seite über den Cloudflare-Tunnel mit
+`HTTP/2 200` erreichbar). `:latest` wird laut Spezifikation nirgends
+verwendet.
+
+| Dienst | Image | Tag |
+|---|---|---|
+| Pi-hole | `pihole/pihole` | `2026.07.2` |
+| Web (statisch) | `nginx` | `1.30.3-alpine` |
+| Cloudflare Tunnel | `cloudflare/cloudflared` | `2026.7.0` |
+| Uptime Kuma | `louislam/uptime-kuma` | `2.4.0` |
+
+Neue Version einsetzen: Tag in `docker-compose.yml` ändern,
+`docker compose pull && docker compose up -d`, diese Tabelle aktualisieren.
+
+---
+
+## Referenz: welcher `.env`-Wert kommt woher
+
+Alle Werte werden von `scripts/setup-env.sh` interaktiv abgefragt bzw. (bei
+`AGE_RECIPIENT`) automatisch erzeugt — diese Tabelle ist die Kurzreferenz,
+falls du `.env` von Hand anpassen willst.
+
+| Variable | Bedeutung | Woher bekommst du den Wert? |
+|---|---|---|
+| `TZ` | Zeitzone aller Container | Z. B. `Europe/Berlin`. Liste: [Wikipedia tz-database](https://en.wikipedia.org/wiki/List_of_tz_database_time_zones) |
+| `LAN_SUBNET` | Heimnetz-CIDR für Firewall-Regeln | Wird automatisch erkannt; manuell prüfen mit `ip -4 addr show` auf dem Pi |
+| `PI_STATIC_IP` | Feste IP des Pi im LAN | Frei wählbar, muss als DHCP-Reservierung im Router eingetragen werden (Anleitung in Schnellstart Schritt 6) |
+| `PORT_PIHOLE_UI` / `PORT_DNS` / `PORT_UPTIME` | Feste Ports für Pi-hole-UI/DNS/Uptime Kuma | Vorgegebene Defaults, i. d. R. unverändert lassen |
+| `DOMAIN` | Öffentliche Domain der Webseite | Eigene Domain, verwaltet als "Zone" in deinem Cloudflare-Account (siehe Voraussetzungen) |
+| `PIHOLE_PASSWORD` | Admin-Passwort Pi-hole | Frei wählbar — `setup-env.sh` kann auch automatisch ein sicheres Passwort generieren |
+| `CLOUDFLARE_TUNNEL_TOKEN` | Tunnel-Token (Secret) | Aus dem Cloudflare Zero-Trust-Dashboard beim Anlegen des Tunnels (Schnellstart Schritt 8) |
+| `BACKUP_REMOTE` | rclone-Remote-Ziel für Backups | Name des rclone-Remotes, das du mit `rclone config` einrichtest (Schnellstart Schritt 13) |
+| `BACKUP_RETENTION_DAILY` / `_WEEKLY` | Anzahl aufbewahrter Backup-Stände | Frei wählbare Zahlen, Default 7 / 4 |
+| `AGE_RECIPIENT` | age-Public-Key zur Backup-Verschlüsselung | Wird von `setup-env.sh` automatisch erzeugt (age-Schlüsselpaar); technisch notwendig, in der SPEC ergänzt |
 
 ---
 
