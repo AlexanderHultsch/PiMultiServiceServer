@@ -3,31 +3,87 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Startseite</title>
+  <title>ahultsch.com</title>
   <style>
-    :root { color-scheme: light dark; }
+    :root {
+      color-scheme: light dark;
+      --bg: #0b1020;
+      --card: #141b30;
+      --text: #e8ecf7;
+      --muted: #9aa4c0;
+      --accent: #6ea8fe;
+      --border: #222c47;
+    }
+    @media (prefers-color-scheme: light) {
+      :root {
+        --bg: #f4f6fb; --card: #ffffff; --text: #10182b;
+        --muted: #5b6478; --accent: #2563eb; --border: #e2e6f0;
+      }
+    }
+    * { box-sizing: border-box; }
     body {
       margin: 0;
       min-height: 100vh;
+      font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
       display: flex;
       align-items: center;
       justify-content: center;
-      font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
-      background: #0b1020;
-      color: #e8ecf7;
-      text-align: center;
+      padding: 2rem 1rem;
     }
-    main { padding: 2rem; max-width: 40rem; }
-    h1 { font-size: 1.75rem; margin-bottom: 0.5rem; }
-    p { color: #9aa4c0; line-height: 1.5; }
-    code { background: #1a2138; padding: 0.1rem 0.3rem; border-radius: 4px; }
+    main { width: 100%; max-width: 42rem; }
+    header { text-align: center; margin-bottom: 2.5rem; }
+    h1 { font-size: 2rem; margin: 0 0 0.5rem; }
+    header p { color: var(--muted); margin: 0; }
+    .grid {
+      display: grid;
+      gap: 1rem;
+      grid-template-columns: 1fr;
+    }
+    @media (min-width: 34rem) {
+      .grid { grid-template-columns: 1fr 1fr; }
+    }
+    a.card {
+      display: block;
+      padding: 1.25rem 1.5rem;
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      text-decoration: none;
+      color: inherit;
+      transition: transform .12s ease, border-color .12s ease;
+    }
+    a.card:hover { transform: translateY(-2px); border-color: var(--accent); }
+    a.card h2 { margin: 0 0 0.35rem; font-size: 1.1rem; }
+    a.card span { color: var(--muted); font-size: 0.9rem; }
+    footer { text-align: center; margin-top: 2.5rem; color: var(--muted); font-size: 0.85rem; }
   </style>
 </head>
 <body>
   <main>
-    <h1>Startseite (Hauptdomain)</h1>
-    <p>Dies ist die statische Hauptseite, ausgeliefert von Caddy aus
-       <code>sites/main/</code>. Ersetze diese Datei durch deinen eigenen Inhalt.</p>
+    <header>
+      <h1>ahultsch.com</h1>
+      <p>Selbst gehostet auf einem Raspberry Pi hinter Cloudflare.</p>
+    </header>
+
+    <!-- Links zu den Unterprojekten. Neue Kachel = einfach kopieren und anpassen.
+         Die Subdomains werden erst erreichbar, sobald im Cloudflare-Dashboard
+         der passende Public Hostname -> http://caddy:80 angelegt ist. -->
+    <div class="grid">
+      <a class="card" href="https://projekt1.ahultsch.com">
+        <h2>Projekt 1 &rarr;</h2>
+        <span>Statische Beispielseite (projekt1.ahultsch.com)</span>
+      </a>
+      <a class="card" href="https://app.ahultsch.com">
+        <h2>App &rarr;</h2>
+        <span>Dynamische Beispiel-App (app.ahultsch.com)</span>
+      </a>
+    </div>
+
+    <footer>
+      Diese Seite liegt in <code>sites/main/index.html</code>.
+    </footer>
   </main>
 </body>
 </html>
