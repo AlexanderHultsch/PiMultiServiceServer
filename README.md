@@ -7,7 +7,7 @@ maßgebliche Quelle der Wahrheit für alle technischen Entscheidungen dient.
 ## Was am Ende dabei herauskommt
 
 - **Beliebig viele Websites** unter deiner eigenen Domain und Subdomains
-  (`deine-domain.de`, `projekt1.deine-domain.de`, …), öffentlich im Internet
+  (`deine-domain.de`, `winecashing.deine-domain.de`, …), öffentlich im Internet
   erreichbar — ohne einen einzigen Port am Router freizugeben. Statische
   Seiten und dynamische Apps (eigener Container) parallel, jede optional in
   ihrem eigenen Git-Repo (siehe „Weitere Websites hosten").
@@ -36,15 +36,15 @@ Seite: statische Seiten direkt aus Ordnern, dynamische Apps an deren Container.
                  │ Cloudflare  │  DNS · TLS · DDoS-Schutz · versteckt Heim-IP
                  └──────┬──────┘
                         │  outbound-only Tunnel
-╔═══════════════════════▼════════════════════════════════════╗
-║ Raspberry Pi · ufw Default-Deny (eingehend)                ║
-║                                                            ║
-║  cloudflared ──▶ caddy ──▶ sites/main       (statisch)     ║
-║                    │  └───▶ sites/projekt1  (statisch)     ║
-║                    └──────▶ app-example      (dynam. App)  ║
-║                                                            ║
-║  pihole (DNS+Adblock, nur LAN)   uptime-kuma (nur LAN)     ║
-╚════════════════════════════════════════════════════════════╝
+╔═══════════════════════▼═══════════════════════════════════════╗
+║ Raspberry Pi · ufw Default-Deny (eingehend)                   ║
+║                                                               ║
+║  cloudflared ──▶ caddy ──▶ sites/main        (statisch)       ║
+║                    │  └───▶ sites/winecashing (statisch)       ║
+║                    └──────▶ app-example       (dynam. App)    ║
+║                                                               ║
+║  pihole (DNS+Adblock, nur LAN)   uptime-kuma (nur LAN)        ║
+╚═══════════════════════════════════════════════════════════════╝
                         │
                    LAN (${LAN_SUBNET})
           alle Geräte nutzen ${PI_STATIC_IP} als DNS
@@ -680,7 +680,7 @@ Es gibt zwei Arten von Seiten:
 | Wo | Ordner unter `sites/<name>/` | Ordner unter `apps/<name>/` (mit `Dockerfile`) |
 | Wie ausgeliefert | Caddy liefert die Dateien direkt | Eigener Container, Caddy leitet per `reverse_proxy` weiter |
 | Ressourcen | Sehr leicht (kein eigener Container) | Ein Container pro App |
-| Mitgeliefertes Beispiel | `sites/main/`, `sites/projekt1/` | `apps/app-example/` |
+| Mitgeliefertes Beispiel | `sites/main/`, `sites/winecashing/` | `apps/app-example/` |
 
 ### Eine statische Seite hinzufügen (z. B. `blog.deine-domain.de`)
 
@@ -690,7 +690,7 @@ Es gibt zwei Arten von Seiten:
    echo '<h1>Mein Blog</h1>' > ~/pi-server/sites/blog/index.html
    ```
 2. In `config/caddy/Caddyfile` einen Block ergänzen (nach dem Muster von
-   `projekt1`):
+   `winecashing`):
    ```
    @blog host blog.{$DOMAIN}
    handle @blog {
@@ -952,7 +952,7 @@ pi-server/
 ├── sites/                       # STATISCHE Seiten (je Ordner = eine Seite)
 │   ├── main/                    #   Hauptdomain
 │   │   └── index.html
-│   └── projekt1/                #   Beispiel-Unterseite
+│   └── winecashing/             #   Unterseite (winecashing.<DOMAIN>)
 │       └── index.html
 ├── apps/                        # DYNAMISCHE Apps (je Ordner = ein Container)
 │   └── app-example/             #   Beispiel-App (Node)

@@ -42,10 +42,10 @@
 		file_server
 	}
 
-	# --- Beispiel statische Unterseite: projekt1.<DOMAIN> -> sites/projekt1/ ---
-	@projekt1 host projekt1.{$DOMAIN}
-	handle @projekt1 {
-		root * /srv/projekt1
+	# --- Statische Unterseite: winecashing.<DOMAIN> -> sites/winecashing/ ---
+	@winecashing host winecashing.{$DOMAIN}
+	handle @winecashing {
+		root * /srv/winecashing
 		file_server
 	}
 
