@@ -489,7 +489,17 @@ Route dorthin führt über `cloudflared`.
 ### 12. Uptime Kuma einrichten
 
 - Web-UI: `http://<PI_STATIC_IP>:3001` (nur LAN), z. B.
-  `http://192.168.178.53:3001` — beim ersten Aufruf Admin-Account anlegen.
+  `http://192.168.178.53:3001`.
+- Beim ersten Aufruf fragt Uptime Kuma **"Welche Datenbank möchtest du
+  verwenden?"** (Embedded MariaDB / MariaDB-MySQL / SQLite) →
+  **SQLite** wählen. Begründung: Embedded MariaDB startet einen kompletten
+  Datenbankserver im Container mit (dauerhaft mehr RAM-Verbrauch auf dem
+  ohnehin geteilten Pi, und es gibt Berichte über Start-Schleifen); der
+  Performance-Vorteil zählt erst bei sehr vielen Monitoren. SQLite ist eine
+  einzelne Datei in `data/uptime-kuma/`, die das nächtliche Backup sauber
+  mitsichert. "MariaDB/MySQL" (extern) scheidet aus — es gibt in diesem
+  Setup keinen separaten Datenbankserver.
+- Danach Admin-Account anlegen.
 - Monitore anlegen für: die öffentliche Webseite (`https://deine-domain.de`),
   Pi-hole (`http://<PI_STATIC_IP>:8080/admin/`), sowie einen
   Internet-Referenz-Check (z. B. `1.1.1.1`).
