@@ -500,9 +500,17 @@ Route dorthin führt über `cloudflared`.
   mitsichert. "MariaDB/MySQL" (extern) scheidet aus — es gibt in diesem
   Setup keinen separaten Datenbankserver.
 - Danach Admin-Account anlegen.
-- Monitore anlegen für: die öffentliche Webseite (`https://deine-domain.de`),
-  Pi-hole (`http://<PI_STATIC_IP>:8080/admin/`), sowie einen
-  Internet-Referenz-Check (z. B. `1.1.1.1`).
+- Monitore anlegen für:
+  - Die öffentliche Webseite: `https://deine-domain.de`
+  - **Pi-hole: `http://pihole/admin/`** (nicht die LAN-IP!) — Uptime Kuma
+    und Pi-hole laufen im selben Docker-Netz `lan_net` und erreichen sich
+    dort direkt über den Servicenamen `pihole` (Port 80 intern). Über die
+    LAN-IP (`http://<PI_STATIC_IP>:8080/admin/`) kann der Monitor
+    fälschlicherweise in einen Timeout laufen — ein Container, der den
+    eigenen host-published Port über die Bridge anspricht, kann an Dockers
+    NAT-"Hairpin"-Limitation scheitern, obwohl die Seite im Browser von
+    jedem echten LAN-Gerät aus normal erreichbar ist.
+  - Ein Internet-Referenz-Check, z. B. `1.1.1.1`.
 
 ### 13. Backup-Ziel verbinden (rclone, interaktiv)
 
@@ -600,6 +608,7 @@ zum genauen Ablauf stehen in den Kommentaren von `scripts/backup.sh`.
 | Pi-hole läuft (`healthy`), Port 53 ist erreichbar, aber echte Geräte im LAN bekommen trotzdem keine Antwort | Pi-hole v6 verwendet standardmäßig `dns.listeningMode=LOCAL`. In einem Docker-Bridge-Netz hält FTL dabei nur Anfragen aus dem eigenen Bridge-Subnetz für "lokal" und verwirft echte LAN-Clients stillschweigend | Pi-hole-Log auf "ignoring query from non-local network ..." prüfen; `FTLCONF_dns_listeningMode: "ALL"` ist bereits in `docker-compose.yml` gesetzt (siehe Kommentar dort) — bei älteren Ständen dieses Repos ggf. nachtragen und `docker compose up -d` erneut ausführen |
 | `docker compose ps` zeigte vor einer Weile "running", Problem besteht aber weiter | Status kann veraltet sein — Container können zwischenzeitlich abgestürzt/neu gestartet sein | `docker compose ps` **live neu ausführen**, nicht auf einen älteren Blick verlassen, bevor man weiter nach der Ursache sucht |
 | DNS-Test von einem Test-Container auf demselben Docker-Bridge-Netz schlägt fehl, obwohl von echten LAN-Geräten aus alles funktioniert | Docker-NAT-"Hairpin"-Limitation: ein Container, der den eigenen host-published Port über die Bridge anspricht, kann daran scheitern — sieht wie ein Bug aus, ist aber eine bekannte Docker-Eigenheit | Zum Testen immer von einem echten LAN-Client oder direkt vom Host aus prüfen (`nslookup <domain> ${PI_STATIC_IP}`), nicht von einem anderen Container auf derselben Bridge |
+| Uptime-Kuma-Monitor für Pi-hole zeigt "timeout of Nms exceeded", obwohl `http://<PI_STATIC_IP>:8080/admin/` im Browser normal lädt | Dieselbe Docker-NAT-Hairpin-Limitation: Uptime Kuma ist selbst ein Container und scheitert daran, den eigenen host-published Port von Pi-hole über die LAN-IP anzusprechen | Monitor-URL auf `http://pihole/admin/` ändern (interner Servicename statt LAN-IP, siehe Schnellstart Schritt 12) |
 
 **Vorsicht beim Live-Debugging von DNS-Problemen:** keinen zweiten,
 unkonfigurierten Pi-hole-Testcontainer per `docker run --network host
