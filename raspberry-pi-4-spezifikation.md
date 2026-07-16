@@ -1,6 +1,6 @@
 # SPEC: Raspberry Pi 4 – Sicherer Multi-Service-Server
 
-**Version:** 2.3 (hardware-agnostisch)
+**Version:** 2.4 (hardware-agnostisch)
 **Zielgruppe dieses Dokuments:** KI-Coding-Agent (Claude Code)
 **Format:** Deklarative Spezifikation. Alle Werte in Abschnitt 1 sind die *einzige Quelle der Wahrheit* (Single Source of Truth) und werden überall referenziert.
 
@@ -65,7 +65,8 @@ Konvention:
 ╔═══════════════════════▼════════════════════════════════╗
 ║ Raspberry Pi · ufw Default-Deny (eingehend)            ║
 ║                                                        ║
-║  cloudflared ──▶ web (statisch, nur intern)            ║
+║  cloudflared ──▶ caddy ──▶ statische Seiten (sites/)   ║
+║                     └────▶ dynamische Apps (apps/)     ║
 ║                                                        ║
 ║  pihole (DNS+Adblock, nur LAN)   uptime-kuma (nur LAN) ║
 ╚════════════════════════════════════════════════════════╝
@@ -74,7 +75,7 @@ Konvention:
           alle Geräte nutzen ${PI_STATIC_IP} als DNS
 ```
 
-**Invariante:** Von außen ist **kein Port offen**. Der einzige externe Pfad zur Webseite führt durch den vom Pi aufgebauten Cloudflare-Tunnel.
+**Invariante:** Von außen ist **kein Port offen**. Der einzige externe Pfad zu den Websites führt durch den vom Pi aufgebauten Cloudflare-Tunnel; intern verteilt `caddy` anhand des Hostnamens.
 
 ---
 
@@ -88,7 +89,7 @@ Konvention:
 - [M5] Secrets ausschließlich in `.env` (gitignored) + verschlüsselte Kopie im Backup-Remote.
 - [M6] SSH nur per Public Key; `PasswordAuthentication no`; `PermitRootLogin no`.
 - [M7] Backup-Restore muss vor Abschluss **einmal real getestet** werden.
-- [M8] `web`-Service besitzt **keinen** `ports:`-Eintrag (nur internes Docker-Netz).
+- [M8] Web-/Proxy-Dienst (`caddy`) und alle App-Container besitzen **keinen** `ports:`-Eintrag (nur internes Docker-Netz, erreichbar ausschließlich über cloudflared).
 
 ### MUST NOT
 - [N1] Keine eingehende Portfreigabe am Router.
@@ -110,15 +111,19 @@ pi-server/
 ├── README.md                 # Setup + Restore
 ├── CLAUDE.md                 # Arbeitsanweisung fuer Claude Code (Aufbau + Live-Debugging)
 ├── raspberry-pi-4-spezifikation.md   # diese Datei
-├── website/
-│   └── index.html            # Platzhalter-Startseite
+├── sites/                    # statische Seiten (je Ordner = eine Seite)
+│   ├── main/index.html
+│   └── projekt1/index.html
+├── apps/                     # dynamische Apps (je Ordner = ein Container)
+│   └── app-example/          #   Dockerfile + Quellcode
 ├── config/
-│   └── nginx/
-│       └── default.conf       # optional, falls Custom-Config nötig
+│   └── caddy/
+│       └── Caddyfile          # Reverse-Proxy-Routing (Abschnitt 5.2)
 ├── scripts/
 │   ├── setup-env.sh          # interaktiver .env-Assistent
 │   ├── 00-bootstrap.sh        # OS-Update, Docker, Pakete
 │   ├── 01-harden.sh           # SSH-Härtung + ufw
+│   ├── deploy-site.sh         # eine Seite aus ihrem Git-Repo aktualisieren
 │   ├── install-backup-cron.sh # idempotente Cron-Installation
 │   ├── backup.sh              # Daten-Backup + Rotation
 │   ├── verify.sh              # buendelt alle Verifikations-Checks
@@ -145,22 +150,34 @@ Format je Dienst: **Image**, **Zweck**, **Exposure**, **Ports**, **Volumes**, **
 - **Upstream-DNS:** verschlüsselt bevorzugt (Quad9 `9.9.9.9` oder Cloudflare `1.1.1.1`); optional DoH-Sidecar.
 - **`FTLCONF_dns_listeningMode: "ALL"` ist PFLICHT** (in v2.2 ergänzt, real auf Hardware verifiziert): Pi-hole v6 defaultet sonst auf `dns.listeningMode=LOCAL`. Da `pihole` in einem Docker-Bridge-Netz läuft, hält FTL dabei nur Anfragen aus dem eigenen Bridge-Subnetz für "lokal" und verwirft echte LAN-Clients stillschweigend (Log: `ignoring query from non-local network ...`) — der Dienst läuft, antwortet aber niemandem im LAN. `ALL` ist hier sicher, weil Port 53 laut [M3]/[N4] ohnehin nur an `${PI_STATIC_IP}` gebunden ist, nicht an `0.0.0.0`.
 
-### 5.2 `web`
-- **Image:** `nginx:<<PIN_TAG>>-alpine` (Alternative: `caddy:<<PIN_TAG>>-alpine`)
-- **Zweck:** Ausliefern der statischen Webseite.
+### 5.2 `caddy` (Reverse Proxy & Webserver)
+Ab v2.4 ersetzt Caddy den früheren einzelnen `web`/nginx-Dienst. Ein Reverse
+Proxy für **beliebig viele** Websites (statisch + dynamisch).
+- **Image:** `caddy:<<PIN_TAG>>-alpine`
+- **Zweck:** cloudflared schickt jeden Hostnamen an `caddy:80`; Caddy verteilt
+  anhand der (Sub-)Domain — statische Seiten aus Ordnern (`file_server`),
+  dynamische Apps per `reverse_proxy` an deren Container.
 - **Exposure:** **nur internes Docker-Netz `edge`** — kein Host-Port (siehe [M8]).
-- **Volumes:** `./website:/usr/share/nginx/html:ro`
-- **Abhängigkeiten:** keine.
+- **Volumes:** `./config/caddy/Caddyfile:/etc/caddy/Caddyfile:ro`, `./sites:/srv:ro`, `./data/caddy/...`
+- **Env:** `DOMAIN=${DOMAIN}` (im Caddyfile als `{$DOMAIN}` eingesetzt).
+- **Routing-Konfiguration:** `config/caddy/Caddyfile` (config-as-code).
+- **`auto_https off`** — Cloudflare terminiert TLS nach außen, Caddy liefert intern nur HTTP.
+
+### 5.2b Websites (Inhalt, kein eigener Docker-Dienst-Typ)
+- **Statische Seite:** Ordner `sites/<name>/` → von Caddy direkt ausgeliefert. Kein eigener Container (ressourcenschonend auf dem Pi).
+- **Dynamische App:** Ordner `apps/<name>/` mit eigenem `Dockerfile` → eigener Compose-Dienst auf `edge`, von Caddy per `reverse_proxy` erreichbar. Beispiel: `apps/app-example` (Node).
+- **Git-Repo je Seite:** jede Seite kann ein eigenes Git-Repo sein (in `sites/`/`apps/` geklont, Pfad in `.gitignore` des Haupt-Repos). Deploy per `scripts/deploy-site.sh <name>`.
+- **Wildcard-Einschränkung:** Cloudflare-Wildcard-Hostnamen mit Proxy sind im kostenlosen Plan nicht verfügbar → pro Subdomain ein Public Hostname im Dashboard (alle → `http://caddy:80`).
 
 ### 5.3 `cloudflared`
 - **Image:** `cloudflare/cloudflared:<<PIN_TAG>>`
-- **Zweck:** Outbound-Tunnel; macht `web` unter `${DOMAIN}` öffentlich erreichbar.
+- **Zweck:** Outbound-Tunnel; macht die Websites unter `${DOMAIN}` (und Subdomains) öffentlich erreichbar.
 - **Exposure:** keine offenen Ports (nur ausgehend).
 - **Command:** `tunnel --no-autoupdate run --token ${CLOUDFLARE_TUNNEL_TOKEN}`
-- **Routing:** `${DOMAIN}` → `http://web:80`.
+- **Routing:** alle Public Hostnames → `http://caddy:80` (Verteilung übernimmt Caddy).
   > **Default:** Token-Methode; Routing wird im Cloudflare-Zero-Trust-Dashboard gesetzt (aktuelle Bezeichnung dort: "Published Application routes").
   > **Alternative (mehr config-as-code):** lokale `config.yml` + Credentials-Datei (Credentials = Secret, gitignored). Für maximale Reproduzierbarkeit wählbar.
-- **Abhängigkeiten:** `depends_on: [web]`
+- **Abhängigkeiten:** `depends_on: [caddy]`
 
 ### 5.4 `uptime-kuma`
 - **Image:** `louislam/uptime-kuma:<<PIN_TAG>>`
@@ -168,7 +185,11 @@ Format je Dienst: **Image**, **Zweck**, **Exposure**, **Ports**, **Volumes**, **
 - **Exposure:** nur LAN.
 - **Ports:** `${PI_STATIC_IP}:${PORT_UPTIME}:3001`
 - **Volumes:** `./data/uptime-kuma:/app/data`
-- **Checks (nach Erststart einzurichten):** `web`-URL (öffentlich), Pi-hole (`${PI_STATIC_IP}:${PORT_PIHOLE_UI}`), Internet-Referenz.
+- **Datenbank:** bei Erststart **SQLite** wählen (leicht, im `data/`-Backup enthalten; Embedded MariaDB unnötig schwer auf dem Pi).
+- **Checks (nach Erststart einzurichten):** öffentliche Website(s), Pi-hole **über den internen Servicenamen** (`http://pihole/admin/`, nicht die LAN-IP — sonst Docker-NAT-Hairpin-Timeout), Internet-Referenz.
+
+### 5.4b E-Mail — [Cloudflare Email Routing, kein Pi-Dienst]
+Ergänzt in v2.4. E-Mail wird **nicht** auf dem Pi gehostet (Port 25 meist gesperrt, eingehende Ports widersprächen [N1], Reputation/Deliverability unlösbar auf Privatanschluss). Stattdessen **Cloudflare Email Routing**: `support@${DOMAIN}` → bestehendes Postfach, reine Dashboard-Konfiguration, keine eingehenden Ports. Nur Empfang/Weiterleitung; Senden-als erfordert zusätzlich einen SMTP-Relay (nicht im Scope).
 
 ### 5.5 `wireguard` / `tailscale` — [OPTIONAL, NICHT im Default-Scope]
 Nur einbauen, wenn ausdrücklich angefordert. Ohne dieses Modul sind Admin & Dashboards nur im LAN erreichbar (bewusste Entscheidung).
@@ -213,9 +234,9 @@ direkt am Gerät statt nur über einen entfernten Chat).
   für die Claude Code CLI.
 
 ### Netzwerke & Policy (Compose)
-- Netzwerk `edge`: `web` + `cloudflared`.
+- Netzwerk `edge`: `caddy` + `cloudflared` + dynamische Apps (`app-example`, …).
 - Netzwerk `lan_net`: `pihole` + `uptime-kuma`.
-- `web` ist ausschließlich über `edge` erreichbar.
+- `caddy` und die Apps sind ausschließlich über `edge` erreichbar (kein Host-Port).
 
 ---
 
@@ -243,19 +264,30 @@ services:
       - ./data/pihole/etc-pihole:/etc/pihole
     networks: [lan_net]
 
-  web:
-    image: nginx:<<PIN_TAG>>-alpine
+  caddy:
+    image: caddy:<<PIN_TAG>>-alpine
     restart: unless-stopped
+    environment:
+      DOMAIN: ${DOMAIN}
     volumes:
-      - ./website:/usr/share/nginx/html:ro
+      - ./config/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./sites:/srv:ro
+      - ./data/caddy/data:/data
+      - ./data/caddy/config:/config
     networks: [edge]
     # KEIN ports: (Constraint M8)
+
+  # Dynamische Apps: je App ein Dienst mit build: ./apps/<name>, networks: [edge].
+  app-example:
+    build: ./apps/app-example
+    restart: unless-stopped
+    networks: [edge]
 
   cloudflared:
     image: cloudflare/cloudflared:<<PIN_TAG>>
     restart: unless-stopped
     command: tunnel --no-autoupdate run --token ${CLOUDFLARE_TUNNEL_TOKEN}
-    depends_on: [web]
+    depends_on: [caddy]
     networks: [edge]
 
   uptime-kuma:
@@ -415,5 +447,6 @@ abgeschlossen gilt.
 - **v2.1:** Abschnitt 5.6 (`claude-code`, optionales On-Demand-Debug-Werkzeug) sowie [M9]/[N6] ergänzt; Repo-Struktur (Abschnitt 4) um `CLAUDE.md`, diese Datei und `scripts/install-claude-code.sh` erweitert; Umsetzungstabelle (Abschnitt 9) um Zeile 10 ergänzt.
 - **v2.2:** `FTLCONF_dns_listeningMode: "ALL"` als Pflicht-Env für `pihole` ergänzt (5.1, 6.1) — ohne diese Einstellung verwirft Pi-hole v6 im Docker-Bridge-Netz echte LAN-Clients stillschweigend als "non-local"; auf realer Hardware gefunden und verifiziert.
 - **v2.3:** Betriebsanforderungen für `backup.sh` präzisiert (8.2): läuft als root (root-crontab), da `data/` den Container-Nutzern gehört; rclone dabei als Repo-Besitzer; tar-Exit-Code 1 bei laufenden Containern akzeptiert. Skripte erhalten Selbstschutz-Guards (mit/ohne sudo, fehlende `.env`/`ufw`).
+- **v2.4:** Multi-Website-Hosting: `nginx`/`web` durch `caddy` (Reverse Proxy) ersetzt (5.2); `sites/` (statisch) + `apps/` (dynamisch, eigener Container) + `config/caddy/Caddyfile` + `scripts/deploy-site.sh` ergänzt (Repo-Struktur Abschnitt 4). Cloudflare-Wildcard-Einschränkung (kostenloser Plan) dokumentiert; alle Public Hostnames → `http://caddy:80`. Cloudflare Email Routing für `support@${DOMAIN}` (5.4b). Uptime Kuma: SQLite empfohlen, Pi-hole-Monitor über internen Servicenamen.
 
-*Ende SPEC v2.3 — hardware-frei, agenten-optimiert.*
+*Ende SPEC v2.4 — hardware-frei, agenten-optimiert.*

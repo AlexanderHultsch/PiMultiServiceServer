@@ -1,0 +1,62 @@
+# Caddy als Reverse Proxy hinter dem Cloudflare Tunnel.
+#
+# WIE ROUTING HIER FUNKTIONIERT:
+# cloudflared schickt JEDEN oeffentlichen Hostnamen an caddy:80 (im Cloudflare-
+# Dashboard sind alle Public Hostnames auf den Service http://caddy:80 gesetzt).
+# Caddy entscheidet dann anhand des Host-Headers, welche Seite ausgeliefert wird.
+#
+# {$DOMAIN} wird beim Einlesen durch den Wert der Umgebungsvariable DOMAIN
+# ersetzt (kommt aus .env ueber docker-compose.yml), z.B. ahultsch.com.
+#
+# NEUE SEITE HINZUFUEGEN:
+#  - Statisch: Ordner unter sites/<name>/ anlegen, unten einen @<name>-Block
+#    ergaenzen, dann `docker compose restart caddy`.
+#  - Dynamisch: App unter apps/<name>/ anlegen, als Dienst in docker-compose.yml
+#    eintragen, unten einen reverse_proxy-Block ergaenzen.
+#  - In BEIDEN Faellen zusaetzlich im Cloudflare-Dashboard einen Public Hostname
+#    <name>.<DOMAIN> -> http://caddy:80 anlegen (siehe README).
+
+{
+	# Hinter Cloudflare Tunnel: Cloudflare uebernimmt HTTPS nach aussen,
+	# Caddy liefert intern nur HTTP auf Port 80. Automatisches HTTPS also aus.
+	auto_https off
+	# Admin-API aus (kein Reload noetig - Konfig-Aenderungen per
+	# `docker compose restart caddy`, statische Dateien werden live ausgeliefert).
+	admin off
+}
+
+:80 {
+	# Sicherheits-Header fuer alle Seiten
+	header {
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		-Server
+	}
+	encode gzip zstd
+
+	# --- Hauptseite (Apex-Domain), statisch: sites/main/ ---
+	@main host {$DOMAIN} www.{$DOMAIN}
+	handle @main {
+		root * /srv/main
+		file_server
+	}
+
+	# --- Beispiel statische Unterseite: projekt1.<DOMAIN> -> sites/projekt1/ ---
+	@projekt1 host projekt1.{$DOMAIN}
+	handle @projekt1 {
+		root * /srv/projekt1
+		file_server
+	}
+
+	# --- Beispiel dynamische App: app.<DOMAIN> -> Container app-example ---
+	@app host app.{$DOMAIN}
+	handle @app {
+		reverse_proxy app-example:3000
+	}
+
+	# Unbekannter Hostname -> 404
+	handle {
+		respond "Not found" 404
+	}
+}

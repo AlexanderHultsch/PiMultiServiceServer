@@ -1,13 +1,16 @@
 # PiMultiServiceServer — Sicherer Multi-Service-Server für Raspberry Pi 4
 
 Dieses Repository baut aus einem Raspberry Pi 4 einen kleinen, sicheren
-Heimserver auf. Setzt `raspberry-pi-4-spezifikation.md` (v2.3) um, die als
+Heimserver auf. Setzt `raspberry-pi-4-spezifikation.md` (v2.4) um, die als
 maßgebliche Quelle der Wahrheit für alle technischen Entscheidungen dient.
 
 ## Was am Ende dabei herauskommt
 
-- **Eine eigene Webseite** unter deiner eigenen Domain, öffentlich im
-  Internet erreichbar — ohne einen einzigen Port am Router freizugeben.
+- **Beliebig viele Websites** unter deiner eigenen Domain und Subdomains
+  (`deine-domain.de`, `projekt1.deine-domain.de`, …), öffentlich im Internet
+  erreichbar — ohne einen einzigen Port am Router freizugeben. Statische
+  Seiten und dynamische Apps (eigener Container) parallel, jede optional in
+  ihrem eigenen Git-Repo (siehe „Weitere Websites hosten").
 - **Pi-hole**: ein netzwerkweiter DNS-Server, der Werbung und Tracker für
   alle Geräte in deinem Heimnetz blockiert (Handys, Laptops, Smart-TVs, …),
   ohne dass auf jedem Gerät einzeln etwas installiert werden muss.
@@ -19,11 +22,12 @@ maßgebliche Quelle der Wahrheit für alle technischen Entscheidungen dient.
   Server gehärtet ist: kein Passwort-Login per SSH, Firewall im
   Default-Deny-Modus, keine unnötig offenen Ports.
 
-Die Webseite läuft technisch hinter einem **Cloudflare Tunnel**: der Pi baut
+Die Websites laufen technisch hinter einem **Cloudflare Tunnel**: der Pi baut
 selbst eine ausgehende, verschlüsselte Verbindung zu Cloudflare auf, worüber
-die Webseite öffentlich erreichbar wird. Von außen bleibt am Router dadurch
-kein einziger Port offen — der Pi ist im Heimnetz unsichtbar, nur die
-Webseite ist über die Domain erreichbar.
+die Seiten öffentlich erreichbar werden. Von außen bleibt am Router dadurch
+kein einziger Port offen — der Pi ist im Heimnetz unsichtbar. Innerhalb des
+Pi verteilt **Caddy** (ein Reverse Proxy) jeden Hostnamen an die richtige
+Seite: statische Seiten direkt aus Ordnern, dynamische Apps an deren Container.
 
 ```
                      Internet
@@ -32,13 +36,15 @@ Webseite ist über die Domain erreichbar.
                  │ Cloudflare  │  DNS · TLS · DDoS-Schutz · versteckt Heim-IP
                  └──────┬──────┘
                         │  outbound-only Tunnel
-╔═══════════════════════▼════════════════════════════════╗
-║ Raspberry Pi · ufw Default-Deny (eingehend)            ║
-║                                                        ║
-║  cloudflared ──▶ web (statisch, nur intern)            ║
-║                                                        ║
-║  pihole (DNS+Adblock, nur LAN)   uptime-kuma (nur LAN) ║
-╚════════════════════════════════════════════════════════╝
+╔═══════════════════════▼════════════════════════════════════╗
+║ Raspberry Pi · ufw Default-Deny (eingehend)                ║
+║                                                            ║
+║  cloudflared ──▶ caddy ──▶ sites/main       (statisch)     ║
+║                    │  └───▶ sites/projekt1  (statisch)     ║
+║                    └──────▶ app-example      (dynam. App)  ║
+║                                                            ║
+║  pihole (DNS+Adblock, nur LAN)   uptime-kuma (nur LAN)     ║
+╚════════════════════════════════════════════════════════════╝
                         │
                    LAN (${LAN_SUBNET})
           alle Geräte nutzen ${PI_STATIC_IP} als DNS
@@ -397,21 +403,30 @@ lässt (OAuth-geschützte Weboberfläche).
    - **Subdomain**: leer lassen, außer eine Subdomain wie `www.` ist gewünscht
    - **Domain**: der `DOMAIN`-Wert aus `.env`
    - **Path**: leer lassen (matcht alles)
-   - **Service URL**: `http://web:80` — **nicht** `localhost`! `web` ist der
-     interne Docker-Servicename aus `docker-compose.yml`, nur für
-     `cloudflared` im `edge`-Netzwerk erreichbar; Port `80`, weil nginx im
-     Container darauf lauscht (kein Host-Port vorhanden, siehe [M8]).
+   - **Service URL**: `http://caddy:80` — **nicht** `localhost`! `caddy` ist
+     der interne Docker-Servicename des Reverse Proxys aus
+     `docker-compose.yml`, nur für `cloudflared` im `edge`-Netzwerk
+     erreichbar; Port `80`, weil Caddy dort lauscht (kein Host-Port, siehe [M8]).
    - **Add route** klicken.
+
+   > **Alle** öffentlichen Hostnamen (Hauptdomain und später jede Subdomain)
+   > zeigen auf **denselben** Service `http://caddy:80` — Caddy verteilt intern
+   > anhand des Hostnamens an die richtige Seite. Für jede weitere Subdomain
+   > wird hier später ein weiterer Public Hostname angelegt (siehe „Weitere
+   > Websites hosten"). Wildcard (`*.deine-domain.de`) geht auf dem kostenlosen
+   > Cloudflare-Plan nicht, daher pro Subdomain ein Eintrag.
 
 ### 9. Dienste starten
 
 ```bash
 docker compose config   # Syntax-/Wertecheck
-docker compose up -d
+docker compose up -d     # baut beim ersten Mal die Beispiel-App (app-example)
 docker compose ps
 ```
 
-Alle vier Dienste sollten `running` sein.
+Alle Dienste sollten `running` sein (`pihole`, `caddy`, `app-example`,
+`cloudflared`, `uptime-kuma`). Beim ersten Start baut Docker das Image der
+Beispiel-App — das dauert einmalig ein bis zwei Minuten.
 
 ### 10. Pi-hole als Netzwerk-DNS eintragen (Router, manuell)
 
@@ -651,6 +666,116 @@ Ein kurzer Überblick über die gängigsten Aufgaben in der Pi-hole-Weboberfläc
 
 ---
 
+## Weitere Websites hosten
+
+Der Reverse Proxy **Caddy** liefert alle Websites aus. `cloudflared` schickt
+jeden Hostnamen an `caddy:80`, und Caddy entscheidet anhand der (Sub-)Domain,
+was ausgeliefert wird — Routing steht in `config/caddy/Caddyfile`.
+
+Es gibt zwei Arten von Seiten:
+
+| | **Statische Seite** | **Dynamische App** |
+|---|---|---|
+| Was | HTML/CSS/JS, fertige Dateien | Laufendes Programm (Node, Python, …) |
+| Wo | Ordner unter `sites/<name>/` | Ordner unter `apps/<name>/` (mit `Dockerfile`) |
+| Wie ausgeliefert | Caddy liefert die Dateien direkt | Eigener Container, Caddy leitet per `reverse_proxy` weiter |
+| Ressourcen | Sehr leicht (kein eigener Container) | Ein Container pro App |
+| Mitgeliefertes Beispiel | `sites/main/`, `sites/projekt1/` | `apps/app-example/` |
+
+### Eine statische Seite hinzufügen (z. B. `blog.deine-domain.de`)
+
+1. Ordner mit Inhalt anlegen:
+   ```bash
+   mkdir -p ~/pi-server/sites/blog
+   echo '<h1>Mein Blog</h1>' > ~/pi-server/sites/blog/index.html
+   ```
+2. In `config/caddy/Caddyfile` einen Block ergänzen (nach dem Muster von
+   `projekt1`):
+   ```
+   @blog host blog.{$DOMAIN}
+   handle @blog {
+       root * /srv/blog
+       file_server
+   }
+   ```
+3. Caddy neu laden: `docker compose restart caddy`
+4. Im Cloudflare-Dashboard einen Public Hostname `blog.deine-domain.de` →
+   `http://caddy:80` anlegen (wie Schnellstart Schritt 8, nur mit Subdomain).
+5. Optional: in Uptime Kuma einen Monitor auf `https://blog.deine-domain.de`.
+
+> Reine Inhalts-Änderungen an bestehenden Seiten (Dateien in `sites/<name>/`
+> ändern) brauchen **keinen** Neustart — Caddy liefert sie sofort aus. Nur
+> Änderungen am `Caddyfile` selbst brauchen `docker compose restart caddy`.
+
+### Eine dynamische App hinzufügen (z. B. `shop.deine-domain.de`)
+
+1. App unter `apps/shop/` anlegen (eigenes `Dockerfile`, muss auf einem Port
+   lauschen). `apps/app-example/` dient als Vorlage.
+2. In `docker-compose.yml` einen Dienst ergänzen (nach dem Muster von
+   `app-example`):
+   ```yaml
+   shop:
+     build: ./apps/shop
+     restart: unless-stopped
+     networks: [edge]
+   ```
+3. In `config/caddy/Caddyfile`:
+   ```
+   @shop host shop.{$DOMAIN}
+   handle @shop {
+       reverse_proxy shop:3000    # Port an die App anpassen
+   }
+   ```
+4. Bauen/starten und Caddy neu laden:
+   ```bash
+   docker compose up -d --build shop
+   docker compose restart caddy
+   ```
+5. Public Hostname im Cloudflare-Dashboard + Uptime-Kuma-Monitor wie oben.
+
+### Jede Seite als eigenes Git-Repo (empfohlen für unabhängige Versionierung)
+
+Standardmäßig liegen die Beispielseiten **im** Haupt-Repo. Für eine echte
+Seite mit eigener Git-Historie stattdessen ein separates Repo in den Ordner
+klonen und diesen Pfad in der `.gitignore` des Haupt-Repos eintragen, damit
+beide sich nicht in die Quere kommen:
+
+```bash
+# Beispiel: eigene Blog-Seite aus separatem Repo
+git clone https://github.com/<du>/mein-blog.git ~/pi-server/sites/blog
+echo '/sites/blog/' >> ~/pi-server/.gitignore
+```
+
+Aktualisieren geht dann bequem per Helfer-Skript (macht `git pull`, und bei
+dynamischen Apps zusätzlich den Rebuild):
+
+```bash
+bash scripts/deploy-site.sh blog     # statische Seite
+bash scripts/deploy-site.sh shop     # dynamische App (baut Container neu)
+```
+
+### E-Mail: `support@deine-domain.de` einrichten (Cloudflare Email Routing)
+
+E-Mail wird **nicht** auf dem Pi gehostet (ein Mailserver auf einem
+Privatanschluss hinter dem Tunnel funktioniert praktisch nicht: Port 25 ist
+meist gesperrt, es bräuchte eingehende Ports entgegen [N1], und ohne feste
+IP + Reputation landen Mails im Spam). Stattdessen leitet **Cloudflare Email
+Routing** kostenlos an dein bestehendes Postfach weiter — reine
+Dashboard-Sache, nichts auf dem Pi:
+
+1. <https://dash.cloudflare.com> → deine Domain → **Email → Email Routing**.
+2. Beim ersten Mal fügt Cloudflare automatisch die nötigen MX-/TXT-Einträge
+   hinzu (bestätigen).
+3. Unter **Routing rules** eine Adresse anlegen: `support@deine-domain.de`
+   → Ziel = deine echte Adresse (z. B. Gmail). Cloudflare schickt dorthin
+   eine Bestätigungsmail, einmal bestätigen.
+4. Fertig — Mails an `support@deine-domain.de` landen in deinem Postfach.
+
+> Nur **Empfang** (Weiterleitung). Um auch **als** `support@…` zu senden,
+> braucht es zusätzlich einen SMTP-Relay-Dienst — nicht Teil dieses Setups.
+
+---
+
 ## Claude Code direkt auf dem Pi (On-Demand-Debugging)
 
 Für Debugging und Wartung lässt sich die Claude Code CLI direkt auf dem Pi
@@ -775,17 +900,17 @@ mindestens 4 GB RAM.
 ## Referenz: verwendete Image-Versionen
 
 Gegen die jeweils aktuelle stabile Version verifiziert und auf echter
-Raspberry-Pi-4-Hardware erfolgreich getestet (alle vier Container
-`running`/`healthy`, öffentliche Seite über den Cloudflare-Tunnel mit
-`HTTP/2 200` erreichbar). `:latest` wird laut Spezifikation nirgends
-verwendet.
+Raspberry-Pi-4-Hardware verifiziert; öffentliche Seite über den
+Cloudflare-Tunnel mit `HTTP/2 200` erreichbar. `:latest` wird laut
+Spezifikation nirgends verwendet.
 
 | Dienst | Image | Tag |
 |---|---|---|
 | Pi-hole | `pihole/pihole` | `2026.07.2` |
-| Web (statisch) | `nginx` | `1.30.3-alpine` |
+| Reverse Proxy / Web | `caddy` | `2.11.4-alpine` |
 | Cloudflare Tunnel | `cloudflare/cloudflared` | `2026.7.0` |
 | Uptime Kuma | `louislam/uptime-kuma` | `2.4.0` |
+| Dynamische Beispiel-App | `node` (Build) | `24-alpine` |
 
 Neue Version einsetzen: Tag in `docker-compose.yml` ändern,
 `docker compose pull && docker compose up -d`, diese Tabelle aktualisieren.
@@ -824,20 +949,51 @@ pi-server/
 ├── README.md
 ├── CLAUDE.md                    # Arbeitsanweisung fuer Claude Code (Aufbau + Live-Debugging)
 ├── raspberry-pi-4-spezifikation.md
-├── website/
-│   └── index.html
+├── sites/                       # STATISCHE Seiten (je Ordner = eine Seite)
+│   ├── main/                    #   Hauptdomain
+│   │   └── index.html
+│   └── projekt1/                #   Beispiel-Unterseite
+│       └── index.html
+├── apps/                        # DYNAMISCHE Apps (je Ordner = ein Container)
+│   └── app-example/             #   Beispiel-App (Node)
+│       ├── Dockerfile
+│       ├── server.js
+│       └── package.json
 ├── config/
-│   └── nginx/
-│       └── default.conf
+│   └── caddy/
+│       └── Caddyfile            # Reverse-Proxy-Routing aller Seiten
 ├── scripts/
 │   ├── setup-env.sh             # interaktiver .env-Assistent
 │   ├── 00-bootstrap.sh
 │   ├── 01-harden.sh
+│   ├── deploy-site.sh           # eine Seite aus ihrem Git-Repo aktualisieren
 │   ├── install-backup-cron.sh   # idempotente Cron-Installation
 │   ├── backup.sh
 │   ├── verify.sh                # buendelt alle Verifikations-Checks
 │   └── install-claude-code.sh   # optional: Claude Code CLI fuer Live-Debugging
 └── data/                        # Laufzeit-Volumes (gitignored)
     ├── pihole/
+    ├── caddy/
     └── uptime-kuma/
 ```
+
+---
+
+## Upgrade von einem älteren Stand (nginx `web` → Caddy)
+
+Frühere Versionen dieses Repos hatten einen einzelnen nginx-Dienst `web` für
+eine einzige Seite. Wer von dort aktualisiert (`git pull`) und die Dienste
+schon laufen hatte, macht danach einmalig:
+
+1. Eigenen Inhalt der alten `website/`-Seite (falls angepasst) nach
+   `sites/main/` übernehmen — der Ordner `website/` und die
+   nginx-Konfiguration entfallen.
+2. Im Cloudflare-Dashboard beim bestehenden Public Hostname die **Service
+   URL von `http://web:80` auf `http://caddy:80`** ändern.
+3. Neu starten (baut die Beispiel-App, ersetzt `web` durch `caddy`):
+   ```bash
+   docker compose up -d --build --remove-orphans
+   docker compose ps
+   ```
+   `--remove-orphans` entfernt den alten `web`-Container.
+4. Prüfen: `curl -I https://deine-domain.de` → `HTTP/2 200`.

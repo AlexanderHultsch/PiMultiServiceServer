@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Bald verfügbar</title>
+  <title>Startseite</title>
   <style>
     :root { color-scheme: light dark; }
     body {
@@ -17,15 +17,17 @@
       color: #e8ecf7;
       text-align: center;
     }
-    main { padding: 2rem; }
+    main { padding: 2rem; max-width: 40rem; }
     h1 { font-size: 1.75rem; margin-bottom: 0.5rem; }
-    p { color: #9aa4c0; }
+    p { color: #9aa4c0; line-height: 1.5; }
+    code { background: #1a2138; padding: 0.1rem 0.3rem; border-radius: 4px; }
   </style>
 </head>
 <body>
   <main>
-    <h1>Diese Seite ist bald verfügbar.</h1>
-    <p>Ersetze diese Datei unter <code>website/index.html</code> durch deinen eigenen Inhalt.</p>
+    <h1>Startseite (Hauptdomain)</h1>
+    <p>Dies ist die statische Hauptseite, ausgeliefert von Caddy aus
+       <code>sites/main/</code>. Ersetze diese Datei durch deinen eigenen Inhalt.</p>
   </main>
 </body>
 </html>

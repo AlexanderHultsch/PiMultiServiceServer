@@ -21,20 +21,38 @@ services:
       - ./data/pihole/etc-pihole:/etc/pihole
     networks: [lan_net]
 
-  web:
-    image: nginx:1.30.3-alpine
+  # Reverse Proxy & Webserver fuer ALLE Websites (statisch + dynamisch).
+  # cloudflared schickt jeden Hostnamen an caddy:80; Caddy verteilt anhand der
+  # Subdomain (Routing in config/caddy/Caddyfile). Ersetzt den frueheren
+  # nginx-"web"-Dienst.
+  caddy:
+    image: caddy:2.11.4-alpine
     restart: unless-stopped
+    environment:
+      # Wird im Caddyfile als {$DOMAIN} eingesetzt (Textersetzung beim Einlesen).
+      DOMAIN: ${DOMAIN}
     volumes:
-      - ./website:/usr/share/nginx/html:ro
-      - ./config/nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./config/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./sites:/srv:ro                 # statische Seiten (read-only)
+      - ./data/caddy/data:/data         # Caddy-Laufzeitdaten
+      - ./data/caddy/config:/config
     networks: [edge]
-    # KEIN ports: (Constraint M8) - nur ueber cloudflared/edge erreichbar
+    # KEIN ports: (Constraint M8) - nur ueber cloudflared erreichbar
+
+  # Beispiel fuer eine DYNAMISCHE App (eigener Container, eigenes Git-Repo).
+  # Winzige Node-App ohne Abhaengigkeiten - spaeter durch die echte App ersetzen.
+  # Caddy leitet app.${DOMAIN} hierher weiter (siehe Caddyfile).
+  app-example:
+    build: ./apps/app-example
+    restart: unless-stopped
+    networks: [edge]
+    # KEIN ports: - nur intern ueber caddy erreichbar
 
   cloudflared:
     image: cloudflare/cloudflared:2026.7.0
     restart: unless-stopped
     command: tunnel --no-autoupdate run --token ${CLOUDFLARE_TUNNEL_TOKEN}
-    depends_on: [web]
+    depends_on: [caddy]
     networks: [edge]
 
   uptime-kuma:
