@@ -113,7 +113,7 @@ pi-server/
 ├── raspberry-pi-4-spezifikation.md   # diese Datei
 ├── sites/                    # statische Seiten (je Ordner = eine Seite)
 │   ├── main/index.html
-│   └── winecashing/index.html
+│   └── beispiel/index.html
 ├── apps/                     # dynamische Apps (je Ordner = ein Container)
 │   └── app-example/          #   Dockerfile + Quellcode
 ├── config/

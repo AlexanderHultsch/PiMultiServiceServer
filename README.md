@@ -7,7 +7,7 @@ maßgebliche Quelle der Wahrheit für alle technischen Entscheidungen dient.
 ## Was am Ende dabei herauskommt
 
 - **Beliebig viele Websites** unter deiner eigenen Domain und Subdomains
-  (`deine-domain.de`, `winecashing.deine-domain.de`, …), öffentlich im Internet
+  (`deine-domain.de`, `beispiel.deine-domain.de`, …), öffentlich im Internet
   erreichbar — ohne einen einzigen Port am Router freizugeben. Statische
   Seiten und dynamische Apps (eigener Container) parallel, jede optional in
   ihrem eigenen Git-Repo (siehe „Weitere Websites hosten").
@@ -40,7 +40,7 @@ Seite: statische Seiten direkt aus Ordnern, dynamische Apps an deren Container.
 ║ Raspberry Pi · ufw Default-Deny (eingehend)                   ║
 ║                                                               ║
 ║  cloudflared ──▶ caddy ──▶ sites/main        (statisch)       ║
-║                    │  └───▶ sites/winecashing (statisch)       ║
+║                    │  └───▶ sites/beispiel     (statisch)       ║
 ║                    └──────▶ app-example       (dynam. App)    ║
 ║                                                               ║
 ║  pihole (DNS+Adblock, nur LAN)   uptime-kuma (nur LAN)        ║
@@ -680,7 +680,7 @@ Es gibt zwei Arten von Seiten:
 | Wo | Ordner unter `sites/<name>/` | Ordner unter `apps/<name>/` (mit `Dockerfile`) |
 | Wie ausgeliefert | Caddy liefert die Dateien direkt | Eigener Container, Caddy leitet per `reverse_proxy` weiter |
 | Ressourcen | Sehr leicht (kein eigener Container) | Ein Container pro App |
-| Mitgeliefertes Beispiel | `sites/main/`, `sites/winecashing/` | `apps/app-example/` |
+| Mitgeliefertes Beispiel | `sites/main/`, `sites/beispiel/` | `apps/app-example/` |
 
 ### Eine statische Seite hinzufügen (z. B. `blog.deine-domain.de`)
 
@@ -690,7 +690,7 @@ Es gibt zwei Arten von Seiten:
    echo '<h1>Mein Blog</h1>' > ~/pi-server/sites/blog/index.html
    ```
 2. In `config/caddy/Caddyfile` einen Block ergänzen (nach dem Muster von
-   `winecashing`):
+   `beispiel`):
    ```
    @blog host blog.{$DOMAIN}
    handle @blog {
@@ -952,7 +952,7 @@ pi-server/
 ├── sites/                       # STATISCHE Seiten (je Ordner = eine Seite)
 │   ├── main/                    #   Hauptdomain
 │   │   └── index.html
-│   └── winecashing/             #   Unterseite (winecashing.<DOMAIN>)
+│   └── beispiel/                #   Beispiel-Unterseite (Vorlage)
 │       └── index.html
 ├── apps/                        # DYNAMISCHE Apps (je Ordner = ein Container)
 │   └── app-example/             #   Beispiel-App (Node)

@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>ahultsch.com</title>
+  <title>Startseite</title>
   <style>
     :root {
       color-scheme: light dark;
@@ -34,7 +34,7 @@
     }
     main { width: 100%; max-width: 42rem; }
     header { text-align: center; margin-bottom: 2.5rem; }
-    h1 { font-size: 2rem; margin: 0 0 0.5rem; }
+    h1 { font-size: 2rem; margin: 0 0 0.5rem; word-break: break-word; }
     header p { color: var(--muted); margin: 0; }
     .grid {
       display: grid;
@@ -58,32 +58,45 @@
     a.card h2 { margin: 0 0 0.35rem; font-size: 1.1rem; }
     a.card span { color: var(--muted); font-size: 0.9rem; }
     footer { text-align: center; margin-top: 2.5rem; color: var(--muted); font-size: 0.85rem; }
+    code { background: var(--card); padding: 0.1rem 0.35rem; border-radius: 5px; border: 1px solid var(--border); }
   </style>
 </head>
 <body>
   <main>
     <header>
-      <h1>ahultsch.com</h1>
+      <!-- Der Domainname wird unten per Skript aus der aktuellen Adresse
+           eingesetzt, damit diese Seite auf JEDER Domain ohne Anpassung läuft. -->
+      <h1 id="titel">Startseite</h1>
       <p>Selbst gehostet auf einem Raspberry Pi hinter Cloudflare.</p>
     </header>
 
-    <!-- Links zu den Unterprojekten. Neue Kachel = einfach kopieren und anpassen.
-         Die Subdomains werden erst erreichbar, sobald im Cloudflare-Dashboard
-         der passende Public Hostname -> http://caddy:80 angelegt ist. -->
+    <!-- Beispiel-Kacheln. Neue Seite = Kachel kopieren und data-sub anpassen.
+         Die Links werden per Skript zu <sub>.<deine-domain> zusammengesetzt.
+         Erreichbar sind sie erst, wenn im Cloudflare-Dashboard der passende
+         Public Hostname -> http://caddy:80 angelegt ist (siehe README). -->
     <div class="grid">
-      <a class="card" href="https://winecashing.ahultsch.com">
-        <h2>WineCashing &rarr;</h2>
-        <span>Statische Seite (winecashing.ahultsch.com)</span>
+      <a class="card" data-sub="beispiel" href="#">
+        <h2>Beispiel-Unterseite &rarr;</h2>
+        <span>Statische Seite (<code>sites/beispiel/</code>)</span>
       </a>
-      <a class="card" href="https://app.ahultsch.com">
-        <h2>App &rarr;</h2>
-        <span>Dynamische Beispiel-App (app.ahultsch.com)</span>
+      <a class="card" data-sub="app" href="#">
+        <h2>Beispiel-App &rarr;</h2>
+        <span>Dynamische App (<code>apps/app-example/</code>)</span>
       </a>
     </div>
 
     <footer>
-      Diese Seite liegt in <code>sites/main/index.html</code>.
+      Diese Seite liegt in <code>sites/main/index.html</code> — durch eigenen Inhalt ersetzen.
     </footer>
   </main>
+
+  <script>
+    // Aktuelle Domain ermitteln (ohne fuehrendes "www.") und Titel + Links fuellen.
+    var apex = (location.hostname || "deine-domain.de").replace(/^www\./, "");
+    document.getElementById("titel").textContent = apex;
+    document.querySelectorAll("a[data-sub]").forEach(function (a) {
+      a.href = "https://" + a.dataset.sub + "." + apex;
+    });
+  </script>
 </body>
 </html>

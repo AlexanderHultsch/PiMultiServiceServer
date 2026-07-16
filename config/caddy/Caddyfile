@@ -6,7 +6,7 @@
 # Caddy entscheidet dann anhand des Host-Headers, welche Seite ausgeliefert wird.
 #
 # {$DOMAIN} wird beim Einlesen durch den Wert der Umgebungsvariable DOMAIN
-# ersetzt (kommt aus .env ueber docker-compose.yml), z.B. ahultsch.com.
+# ersetzt (kommt aus .env ueber docker-compose.yml), z.B. deine-domain.de.
 #
 # NEUE SEITE HINZUFUEGEN:
 #  - Statisch: Ordner unter sites/<name>/ anlegen, unten einen @<name>-Block
@@ -42,10 +42,11 @@
 		file_server
 	}
 
-	# --- Statische Unterseite: winecashing.<DOMAIN> -> sites/winecashing/ ---
-	@winecashing host winecashing.{$DOMAIN}
-	handle @winecashing {
-		root * /srv/winecashing
+	# --- Beispiel statische Unterseite: beispiel.<DOMAIN> -> sites/beispiel/ ---
+	# (Vorlage: kopieren, umbenennen, eigenen Ordner unter sites/ anlegen.)
+	@beispiel host beispiel.{$DOMAIN}
+	handle @beispiel {
+		root * /srv/beispiel
 		file_server
 	}
 
