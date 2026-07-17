@@ -4,3 +4,7 @@
 *.age
 *.gpg
 backup.log
+
+# Eigenstaendige App-Repos, die auf dem Pi in apps/ hineingeklont werden
+# (getrennte Git-Historie, gehoeren nicht ins Infrastruktur-Repo).
+/apps/winecashing/

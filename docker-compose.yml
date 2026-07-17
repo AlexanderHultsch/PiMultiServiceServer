@@ -48,6 +48,21 @@ services:
     networks: [edge]
     # KEIN ports: - nur intern ueber caddy erreichbar
 
+  # Wine Caching - dynamische App (eigenes Repo, hineingeklont nach apps/winecashing/).
+  # Caddy leitet winecashing.${DOMAIN} hierher (siehe Caddyfile). Persistenz unter
+  # data/winecashing/ -> wandert automatisch ins naechtliche Backup.
+  winecashing:
+    build: ./apps/winecashing
+    restart: unless-stopped
+    environment:
+      PORT: "3000"
+      DB_PATH: /data/winecashing.db
+    env_file: ./apps/winecashing/.env    # Secrets (SESSION_SECRET, ADMIN_*), liegt nur auf dem Pi
+    volumes:
+      - ./data/winecashing:/data
+    networks: [edge]
+    # KEIN ports: - nur intern ueber caddy erreichbar
+
   cloudflared:
     image: cloudflare/cloudflared:2026.7.0
     restart: unless-stopped

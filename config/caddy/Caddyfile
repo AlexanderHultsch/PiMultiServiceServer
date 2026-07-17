@@ -56,6 +56,12 @@
 		reverse_proxy app-example:3000
 	}
 
+	# --- Wine Caching (dynamische App): winecashing.<DOMAIN> -> Container winecashing ---
+	@winecashing host winecashing.{$DOMAIN}
+	handle @winecashing {
+		reverse_proxy winecashing:3000
+	}
+
 	# Unbekannter Hostname -> 404
 	handle {
 		respond "Not found" 404
