@@ -62,6 +62,12 @@
 		reverse_proxy winecashing:3000
 	}
 
+	# --- GinPerium (dynamische App): ginperium.<DOMAIN> -> Container ginperium ---
+	@ginperium host ginperium.{$DOMAIN}
+	handle @ginperium {
+		reverse_proxy ginperium:3000
+	}
+
 	# Unbekannter Hostname -> 404
 	handle {
 		respond "Not found" 404
