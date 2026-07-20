@@ -614,6 +614,7 @@ zum genauen Ablauf stehen in den Kommentaren von `scripts/backup.sh`.
 | `scripts/01-harden.sh` bricht mit Fehler ab | Kein Public Key in `~/.ssh/authorized_keys` | Key wie in Schnellstart Schritt 1 hinterlegen, dann erneut ausführen |
 | `scripts/backup.sh` schlägt bei `rclone` fehl | Remote nicht konfiguriert oder Name stimmt nicht mit `BACKUP_REMOTE` überein. Wichtig: `rclone config` als normaler Nutzer ausführen (nicht mit sudo) — das Backup nutzt automatisch dessen Konfiguration | `rclone listremotes` (ohne sudo); Schnellstart Schritt 13 wiederholen |
 | `-bash: git: command not found` beim Klonen | Raspberry Pi OS Lite hat `git` nicht vorinstalliert, `00-bootstrap.sh` (installiert es) läuft erst nach dem Klonen | `sudo apt update && sudo apt install -y git`, dann erneut klonen (Schnellstart Schritt 3) |
+| `git pull` in `sites/<name>` meldet `Already up to date`, aber die Seite zeigt weiter alte Inhalte | `sites/<name>` ist kein eigenes Git-Repo, sondern liegt noch im Haupt-Repo (häufig bei `sites/main`, wenn die mitgelieferte Beispielseite direkt durch die echte Homepage ersetzt wurde) — `git pull` löst sich dann gegen das Haupt-Repo auf, nicht gegen die eigentliche Website | `git remote -v` in `sites/<name>` prüfen: zeigt es das Haupt-Repo statt der Website? → `bash scripts/adopt-site-repo.sh sites/<name> <echte-repo-url>` (siehe „Jede Seite als eigenes Git-Repo") |
 | Nach Reboot nicht mehr unter der reservierten IP erreichbar | Router-Reservierung hängt an der MAC-Adresse des **falschen** Interfaces (z. B. `eth0` reserviert, Pi hängt aber an `wlan0`, oder umgekehrt) | `ip -4 addr show` auf dem Pi, aktives Interface ermitteln, MAC damit im Router abgleichen (Schnellstart Schritt 6) |
 | `ufw`-Regeln passen nicht zum tatsächlichen LAN | `LAN_SUBNET` in `.env` enthält eine Host-Adresse statt der Netz-Adresse (z. B. `192.168.178.53/24` statt `192.168.178.0/24`) | `grep LAN_SUBNET .env` prüfen, bei Bedarf korrigieren, `scripts/01-harden.sh` erneut ausführen |
 | Cloudflare-Dashboard zeigt keinen Menüpunkt "Public Hostname" | Cloudflare hat die Bezeichnung zu "Published Application routes" / "Add published application" geändert (Stand 2026) | Im Tunnel-Detail nach **Published Application routes** suchen, Felder wie in Schnellstart Schritt 8 ausfüllen |
@@ -752,6 +753,35 @@ dynamischen Apps zusätzlich den Rebuild):
 ```bash
 bash scripts/deploy-site.sh blog     # statische Seite
 bash scripts/deploy-site.sh shop     # dynamische App (baut Container neu)
+```
+
+#### Eine mitgelieferte Beispielseite nachträglich umstellen (z. B. `sites/main`)
+
+`sites/main` und `sites/beispiel` liegen von Anfang an **im Haupt-Repo** (siehe
+Tabelle oben). Ersetzt man ihren Inhalt einfach durch die eigene, echte
+Homepage, ohne die beiden Schritte oben (Ordner aus dem Haupt-Repo lösen +
+`.gitignore`-Eintrag) nachzuholen, bleibt der Ordner weiterhin Teil des
+Haupt-Repos. Das Tückische daran: `git pull` funktioniert in diesem Zustand
+scheinbar völlig normal — er meldet nur `Already up to date`, weil er sich
+in Wirklichkeit gegen das **Haupt-Repo** auflöst, nicht gegen das Repo der
+eigentlichen Website. Die Seite aktualisiert sich dann nie, ohne dass eine
+Fehlermeldung darauf hinweist.
+
+Kurzer Check, ob ein Seitenordner betroffen ist:
+
+```bash
+cd ~/pi-server/sites/main
+git remote -v   # zeigt das Remote des HAUPT-Repos statt der eigentlichen Website? -> betroffen
+```
+
+Ein mitgeliefertes Skript erledigt die Umstellung automatisch (Haupt-Repo
+entkoppeln + `.gitignore`-Eintrag + Neuklon vom echten Repo; der alte Inhalt
+wird vorsichtshalber nicht gelöscht, sondern als `sites/main.bak-<Zeitstempel>`
+danebengelegt):
+
+```bash
+bash scripts/adopt-site-repo.sh sites/main https://github.com/<du>/meine-homepage.git
+git push   # den Commit, der sites/main jetzt ignoriert, nicht vergessen
 ```
 
 ### E-Mail: `support@deine-domain.de` einrichten (Cloudflare Email Routing)

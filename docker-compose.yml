@@ -63,6 +63,21 @@ services:
     networks: [edge]
     # KEIN ports: - nur intern ueber caddy erreichbar
 
+  # GinPerium - dynamische App (eigenes Repo, hineingeklont nach apps/ginperium/).
+  # Caddy leitet ginperium.${DOMAIN} hierher (siehe Caddyfile). Node + SQLite,
+  # keine externen Secrets noetig. Persistenz unter data/ginperium/ -> wandert
+  # automatisch ins naechtliche Backup.
+  ginperium:
+    build: ./apps/ginperium
+    restart: unless-stopped
+    environment:
+      PORT: "3000"
+      DB_PATH: /data/ginperium.sqlite
+    volumes:
+      - ./data/ginperium:/data
+    networks: [edge]
+    # KEIN ports: - nur intern ueber caddy erreichbar
+
   cloudflared:
     image: cloudflare/cloudflared:2026.7.0
     restart: unless-stopped
