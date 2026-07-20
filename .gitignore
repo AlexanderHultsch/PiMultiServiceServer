@@ -9,3 +9,4 @@ backup.log
 # (getrennte Git-Historie, gehoeren nicht ins Infrastruktur-Repo).
 /apps/winecashing/
 /apps/ginperium/
+admin.env
