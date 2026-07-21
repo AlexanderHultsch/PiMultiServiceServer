@@ -64,15 +64,17 @@ services:
     # KEIN ports: - nur intern ueber caddy erreichbar
 
   # GinPerium - dynamische App (eigenes Repo, hineingeklont nach apps/ginperium/).
-  # Caddy leitet ginperium.${DOMAIN} hierher (siehe Caddyfile). Node + SQLite,
-  # keine externen Secrets noetig. Persistenz unter data/ginperium/ -> wandert
-  # automatisch ins naechtliche Backup.
+  # Caddy leitet ginperium.${DOMAIN} hierher (siehe Caddyfile). Node + SQLite.
+  # Hat jetzt (wie winecashing) einen Admin-Login -> braucht SESSION_SECRET/
+  # ADMIN_* aus der .env, die scripts/deploy.sh schreibt. Persistenz unter
+  # data/ginperium/ -> wandert automatisch ins naechtliche Backup.
   ginperium:
     build: ./apps/ginperium
     restart: unless-stopped
     environment:
       PORT: "3000"
-      DB_PATH: /data/ginperium.sqlite
+      DB_PATH: /data/ginperium.db
+    env_file: ./apps/ginperium/.env    # Secrets (SESSION_SECRET, ADMIN_*), liegt nur auf dem Pi
     volumes:
       - ./data/ginperium:/data
     networks: [edge]
