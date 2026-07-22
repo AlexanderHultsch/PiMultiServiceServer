@@ -614,6 +614,7 @@ zum genauen Ablauf stehen in den Kommentaren von `scripts/backup.sh`.
 | `scripts/01-harden.sh` bricht mit Fehler ab | Kein Public Key in `~/.ssh/authorized_keys` | Key wie in Schnellstart Schritt 1 hinterlegen, dann erneut ausführen |
 | `scripts/backup.sh` schlägt bei `rclone` fehl | Remote nicht konfiguriert oder Name stimmt nicht mit `BACKUP_REMOTE` überein. Wichtig: `rclone config` als normaler Nutzer ausführen (nicht mit sudo) — das Backup nutzt automatisch dessen Konfiguration | `rclone listremotes` (ohne sudo); Schnellstart Schritt 13 wiederholen |
 | `-bash: git: command not found` beim Klonen | Raspberry Pi OS Lite hat `git` nicht vorinstalliert, `00-bootstrap.sh` (installiert es) läuft erst nach dem Klonen | `sudo apt update && sudo apt install -y git`, dann erneut klonen (Schnellstart Schritt 3) |
+| `git pull` in `sites/<name>` meldet `Already up to date`, aber die Seite zeigt weiter alte Inhalte | `sites/<name>` ist kein eigenes Git-Repo, sondern liegt noch im Haupt-Repo (häufig bei `sites/main`, wenn die mitgelieferte Beispielseite direkt durch die echte Homepage ersetzt wurde) — `git pull` löst sich dann gegen das Haupt-Repo auf, nicht gegen die eigentliche Website | `git remote -v` in `sites/<name>` prüfen: zeigt es das Haupt-Repo statt der Website? → `bash scripts/adopt-site-repo.sh sites/<name> <echte-repo-url>` (siehe „Jede Seite als eigenes Git-Repo") |
 | Nach Reboot nicht mehr unter der reservierten IP erreichbar | Router-Reservierung hängt an der MAC-Adresse des **falschen** Interfaces (z. B. `eth0` reserviert, Pi hängt aber an `wlan0`, oder umgekehrt) | `ip -4 addr show` auf dem Pi, aktives Interface ermitteln, MAC damit im Router abgleichen (Schnellstart Schritt 6) |
 | `ufw`-Regeln passen nicht zum tatsächlichen LAN | `LAN_SUBNET` in `.env` enthält eine Host-Adresse statt der Netz-Adresse (z. B. `192.168.178.53/24` statt `192.168.178.0/24`) | `grep LAN_SUBNET .env` prüfen, bei Bedarf korrigieren, `scripts/01-harden.sh` erneut ausführen |
 | Cloudflare-Dashboard zeigt keinen Menüpunkt "Public Hostname" | Cloudflare hat die Bezeichnung zu "Published Application routes" / "Add published application" geändert (Stand 2026) | Im Tunnel-Detail nach **Published Application routes** suchen, Felder wie in Schnellstart Schritt 8 ausfüllen |
@@ -753,6 +754,80 @@ dynamischen Apps zusätzlich den Rebuild):
 bash scripts/deploy-site.sh blog     # statische Seite
 bash scripts/deploy-site.sh shop     # dynamische App (baut Container neu)
 ```
+
+#### Eine mitgelieferte Beispielseite nachträglich umstellen (z. B. `sites/main`)
+
+`sites/main` und `sites/beispiel` liegen von Anfang an **im Haupt-Repo** (siehe
+Tabelle oben). Ersetzt man ihren Inhalt einfach durch die eigene, echte
+Homepage, ohne die beiden Schritte oben (Ordner aus dem Haupt-Repo lösen +
+`.gitignore`-Eintrag) nachzuholen, bleibt der Ordner weiterhin Teil des
+Haupt-Repos. Das Tückische daran: `git pull` funktioniert in diesem Zustand
+scheinbar völlig normal — er meldet nur `Already up to date`, weil er sich
+in Wirklichkeit gegen das **Haupt-Repo** auflöst, nicht gegen das Repo der
+eigentlichen Website. Die Seite aktualisiert sich dann nie, ohne dass eine
+Fehlermeldung darauf hinweist.
+
+Kurzer Check, ob ein Seitenordner betroffen ist:
+
+```bash
+cd ~/pi-server/sites/main
+git remote -v   # zeigt das Remote des HAUPT-Repos statt der eigentlichen Website? -> betroffen
+```
+
+Ein mitgeliefertes Skript erledigt die Umstellung automatisch (Haupt-Repo
+entkoppeln + `.gitignore`-Eintrag + Neuklon vom echten Repo; der alte Inhalt
+wird vorsichtshalber nicht gelöscht, sondern als `sites/main.bak-<Zeitstempel>`
+danebengelegt):
+
+```bash
+bash scripts/adopt-site-repo.sh sites/main https://github.com/<du>/meine-homepage.git
+git push   # den Commit, der sites/main jetzt ignoriert, nicht vergessen
+```
+
+### Mehrere Seiten zentral verwalten (`sites.conf` + `deploy.sh`)
+
+`deploy-site.sh` aktualisiert **eine** bereits vorhandene Seite. Sobald mehrere
+eigene Websites nach dem Muster „ein Repo = ein Container" laufen (siehe oben),
+lohnt sich stattdessen `scripts/deploy.sh`: ein Manifest-getriebenes Skript,
+das **alle** in `sites.conf` eingetragenen Seiten in einem Rutsch klont/pullt,
+baut und startet.
+
+`sites.conf` im Repo-Wurzelverzeichnis (eine Zeile pro Seite):
+
+```
+# name    repo_url                                  host    admin
+shop      https://github.com/<du>/meine-shop-app.git shop    yes
+blog      https://github.com/<du>/mein-blog.git      blog    no
+```
+
+- `name` = Ordnername unter `apps/` **und** Service-Name in `docker-compose.yml`
+  (muss dort ebenfalls als Dienst eingetragen sein, siehe „Eine dynamische App
+  hinzufügen" oben — `sites.conf` allein reicht nicht).
+- `host` = Subdomain-Label, oder `apex` für die Hauptdomain selbst.
+- `admin` = `yes`, wenn die App einen Login braucht. `deploy.sh` fragt dann
+  einmalig nach einem **gemeinsamen** Admin-Benutzernamen/-Passwort (in
+  `admin.env`, gitignored, wird für alle `admin: yes`-Seiten wiederverwendet),
+  schreibt es zusammen mit einem zufälligen `SESSION_SECRET` in `apps/<name>/.env`
+  und führt anschließend `npm run seed:admin` im Container aus. Die jeweilige
+  App muss diese drei Variablen (`ADMIN_USER`, `ADMIN_PASSWORD`,
+  `SESSION_SECRET`) selbst konsumieren (z. B. per `express-session` +
+  eigenem `seed:admin`-Skript).
+
+Nutzung auf dem Pi:
+
+```bash
+bash scripts/deploy.sh                # normales Update aller Seiten
+bash scripts/deploy.sh --fresh        # zusaetzlich alle App-Datenbanken zuruecksetzen
+bash scripts/deploy.sh --set-password # gemeinsames Admin-Passwort neu setzen
+```
+
+**Wann welches Skript?**
+
+| Situation | Skript |
+|---|---|
+| Eine einzelne Seite schnell aktualisieren (kein Admin-Handling, kein Caddy-Neustart) | `deploy-site.sh <name>` |
+| Alle Seiten aus `sites.conf` auf einmal aktualisieren, inkl. gemeinsamem Admin-Account und Caddy-Neustart | `deploy.sh` |
+| Eine Seite ist noch gar nicht geklont | `deploy.sh` (klont automatisch aus `sites.conf`) — oder manuell klonen, dann `deploy-site.sh` |
 
 ### E-Mail: `support@deine-domain.de` einrichten (Cloudflare Email Routing)
 
@@ -962,11 +1037,14 @@ pi-server/
 ├── config/
 │   └── caddy/
 │       └── Caddyfile            # Reverse-Proxy-Routing aller Seiten
+├── sites.conf                    # Manifest aller Seiten fuer scripts/deploy.sh
 ├── scripts/
 │   ├── setup-env.sh             # interaktiver .env-Assistent
 │   ├── 00-bootstrap.sh
 │   ├── 01-harden.sh
 │   ├── deploy-site.sh           # eine Seite aus ihrem Git-Repo aktualisieren
+│   ├── deploy.sh                # alle Seiten aus sites.conf klonen/bauen/starten + Admin-Accounts seeden
+│   ├── adopt-site-repo.sh       # mitgelieferten Seitenordner zu eigenem Git-Repo umbauen
 │   ├── install-backup-cron.sh   # idempotente Cron-Installation
 │   ├── backup.sh
 │   ├── verify.sh                # buendelt alle Verifikations-Checks
